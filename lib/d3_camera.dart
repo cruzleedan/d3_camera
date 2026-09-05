@@ -23,6 +23,18 @@ export 'src/camera/flash_mode.dart';
 export 'src/preview/camera_preview_widget.dart';
 export 'src/preview/preview_fit.dart';
 
+// Ready-made UI. Three layers, from most to least turnkey:
+//   D3CameraScreen -- a complete working camera screen
+//   D3CameraScope  -- controller lifecycle handled, UI yours
+//   the widgets below + CustomCameraPreview -- compose your own
+// Each is built from the layer beneath it, so starting at the top costs
+// nothing in flexibility later.
+export 'src/ui/camera_control_buttons.dart';
+export 'src/ui/camera_scope.dart';
+export 'src/ui/camera_screen.dart';
+export 'src/ui/capture_review_screen.dart';
+export 'src/ui/zoom_level_bar.dart';
+
 // Coordinates
 export 'src/coordinates/normalized_point.dart';
 
