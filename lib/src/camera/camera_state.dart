@@ -3,6 +3,7 @@ import 'dart:ui' show Size;
 import 'package:meta/meta.dart';
 
 import '../errors/camera_exceptions.dart';
+import 'aspect_ratio_preset.dart';
 import 'camera_capability.dart';
 import 'flash_mode.dart';
 
@@ -35,6 +36,7 @@ class CameraState {
     this.textureId,
     this.previewSize,
     this.sensorOrientationDegrees,
+    this.aspectRatio = AspectRatioPreset.ratio4x3,
     this.flashMode = FlashMode.off,
     this.zoomRatio = 1.0,
     this.exposureCompensation = 0.0,
@@ -68,6 +70,11 @@ class CameraState {
   /// on API 29+ devices. Null under the same conditions as [textureId].
   final int? sensorOrientationDegrees;
 
+  /// The currently-bound preview/capture aspect ratio. Reflects
+  /// `CameraConfiguration.initialAspectRatio` until changed via
+  /// `CustomCameraController.setAspectRatio`.
+  final AspectRatioPreset aspectRatio;
+
   final FlashMode flashMode;
   final double zoomRatio;
   final double exposureCompensation;
@@ -83,6 +90,7 @@ class CameraState {
     bool clearTextureId = false,
     Size? previewSize,
     int? sensorOrientationDegrees,
+    AspectRatioPreset? aspectRatio,
     FlashMode? flashMode,
     double? zoomRatio,
     double? exposureCompensation,
@@ -98,6 +106,7 @@ class CameraState {
       sensorOrientationDegrees: clearTextureId
           ? null
           : (sensorOrientationDegrees ?? this.sensorOrientationDegrees),
+      aspectRatio: aspectRatio ?? this.aspectRatio,
       flashMode: flashMode ?? this.flashMode,
       zoomRatio: zoomRatio ?? this.zoomRatio,
       exposureCompensation: exposureCompensation ?? this.exposureCompensation,
@@ -116,6 +125,7 @@ class CameraState {
           textureId == other.textureId &&
           previewSize == other.previewSize &&
           sensorOrientationDegrees == other.sensorOrientationDegrees &&
+          aspectRatio == other.aspectRatio &&
           flashMode == other.flashMode &&
           zoomRatio == other.zoomRatio &&
           exposureCompensation == other.exposureCompensation &&
@@ -129,6 +139,7 @@ class CameraState {
     textureId,
     previewSize,
     sensorOrientationDegrees,
+    aspectRatio,
     flashMode,
     zoomRatio,
     exposureCompensation,
@@ -141,6 +152,7 @@ class CameraState {
       'capability: $capability, textureId: $textureId, '
       'previewSize: $previewSize, '
       'sensorOrientationDegrees: $sensorOrientationDegrees, '
+      'aspectRatio: $aspectRatio, '
       'flashMode: $flashMode, zoomRatio: $zoomRatio, '
       'exposureCompensation: $exposureCompensation, lastError: $lastError)';
 }

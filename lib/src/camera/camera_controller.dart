@@ -5,6 +5,7 @@ import '../coordinates/normalized_point.dart';
 import '../errors/camera_exceptions.dart';
 import '../platform/camera_platform_interface.dart';
 import '../platform/method_channel_camera.dart';
+import 'aspect_ratio_preset.dart';
 import 'camera_capability.dart';
 import 'camera_configuration.dart';
 import 'camera_state.dart';
@@ -107,6 +108,7 @@ class CustomCameraController extends ChangeNotifier
     try {
       final info = await _platform.initialize(
         configuration.initialLensDirection,
+        configuration.initialAspectRatio,
       );
       _setValue(
         _value.copyWith(
@@ -116,6 +118,7 @@ class CustomCameraController extends ChangeNotifier
           textureId: info.textureId,
           previewSize: info.previewSize,
           sensorOrientationDegrees: info.sensorOrientationDegrees,
+          aspectRatio: configuration.initialAspectRatio,
         ),
       );
     } on CustomCameraException catch (e) {
@@ -193,6 +196,41 @@ class CustomCameraController extends ChangeNotifier
           textureId: info.textureId,
           previewSize: info.previewSize,
           sensorOrientationDegrees: info.sensorOrientationDegrees,
+        ),
+      );
+    } on CustomCameraException catch (e) {
+      _setValue(_value.copyWith(status: CameraStatus.error, lastError: e));
+      rethrow;
+    }
+  }
+
+  /// Rebinds the session with [aspectRatio] applied to both preview and
+  /// still capture, so what's framed live always matches what's
+  /// captured — matching the native camera app convention of a 4:3/16:9
+  /// toggle within one camera session. Only valid while
+  /// [CameraStatus.ready]; transitions through
+  /// [CameraStatus.switchingCamera] (the same rebind cost as
+  /// [switchCamera], since CameraX must rebind the whole use-case group
+  /// for a new resolution negotiation). [CameraState.textureId] and
+  /// [CameraState.previewSize] are replaced with the newly bound
+  /// session's values.
+  Future<void> setAspectRatio(AspectRatioPreset aspectRatio) async {
+    _requireStatus(CameraStatus.ready, 'setAspectRatio');
+
+    _setValue(
+      _value.copyWith(status: CameraStatus.switchingCamera, clearTextureId: true),
+    );
+
+    try {
+      final info = await _platform.setAspectRatio(aspectRatio);
+      _setValue(
+        _value.copyWith(
+          status: CameraStatus.ready,
+          capability: info.capability,
+          textureId: info.textureId,
+          previewSize: info.previewSize,
+          sensorOrientationDegrees: info.sensorOrientationDegrees,
+          aspectRatio: aspectRatio,
         ),
       );
     } on CustomCameraException catch (e) {

@@ -38,17 +38,13 @@ class D3CameraPlugin :
         CameraHostApi.setUp(binding.binaryMessenger, null)
     }
 
-    override suspend fun initialize(initialLensDirection: LensDirection): InitializeResult {
+    override suspend fun initialize(
+        initialLensDirection: LensDirection,
+        initialAspectRatio: AspectRatioPresetData,
+    ): CameraSessionResultData {
         val activeSession = requireSession()
-        val bound = bindOrThrow(activeSession, initialLensDirection)
-        return InitializeResult(
-            capability =
-                CameraCapabilityReader.read(bound.cameraInfo, activeSession.availableLensDirections()),
-            textureId = bound.textureId,
-            previewWidth = bound.previewWidth.toLong(),
-            previewHeight = bound.previewHeight.toLong(),
-            sensorOrientationDegrees = bound.sensorOrientationDegrees.toLong(),
-        )
+        val bound = bindOrThrow(activeSession, initialLensDirection, initialAspectRatio)
+        return bound.toResultData(activeSession)
     }
 
     override suspend fun dispose() {
@@ -94,17 +90,34 @@ class D3CameraPlugin :
         )
     }
 
-    override suspend fun switchCamera(lensDirection: LensDirection): SwitchCameraResult {
+    override suspend fun switchCamera(lensDirection: LensDirection): CameraSessionResultData {
         val activeSession = requireSession()
-        val bound = bindOrThrow(activeSession, lensDirection)
-        return SwitchCameraResult(
-            capability =
-                CameraCapabilityReader.read(bound.cameraInfo, activeSession.availableLensDirections()),
-            textureId = bound.textureId,
-            previewWidth = bound.previewWidth.toLong(),
-            previewHeight = bound.previewHeight.toLong(),
-            sensorOrientationDegrees = bound.sensorOrientationDegrees.toLong(),
-        )
+        val bound =
+            try {
+                activeSession.switchLens(lensDirection)
+            } catch (e: IllegalArgumentException) {
+                throw FlutterError(
+                    "camera_unavailable",
+                    e.message ?: "No camera available for the requested lens direction.",
+                    null,
+                )
+            } catch (e: SecurityException) {
+                throw FlutterError("permission_denied", e.message ?: "Camera permission was denied.", null)
+            } catch (e: IllegalStateException) {
+                throw FlutterError("camera_unavailable", e.message, null)
+            }
+        return bound.toResultData(activeSession)
+    }
+
+    override suspend fun setAspectRatio(aspectRatio: AspectRatioPresetData): CameraSessionResultData {
+        val activeSession = requireSession()
+        val bound =
+            try {
+                activeSession.setAspectRatio(aspectRatio)
+            } catch (e: IllegalStateException) {
+                throw FlutterError("camera_unavailable", e.message, null)
+            }
+        return bound.toResultData(activeSession)
     }
 
     override suspend fun setZoom(zoomRatio: Double) {
@@ -142,9 +155,10 @@ class D3CameraPlugin :
     private suspend fun bindOrThrow(
         activeSession: CameraXSession,
         lensDirection: LensDirection,
+        aspectRatio: AspectRatioPresetData,
     ): CameraXSession.BoundSession {
         try {
-            return activeSession.bind(lensDirection)
+            return activeSession.bind(lensDirection, aspectRatio)
         } catch (e: IllegalArgumentException) {
             throw FlutterError(
                 "camera_unavailable",
@@ -159,4 +173,16 @@ class D3CameraPlugin :
             )
         }
     }
+
+    private fun CameraXSession.BoundSession.toResultData(
+        activeSession: CameraXSession,
+    ): CameraSessionResultData =
+        CameraSessionResultData(
+            capability =
+                CameraCapabilityReader.read(cameraInfo, activeSession.availableLensDirections()),
+            textureId = textureId,
+            previewWidth = previewWidth.toLong(),
+            previewHeight = previewHeight.toLong(),
+            sensorOrientationDegrees = sensorOrientationDegrees.toLong(),
+        )
 }

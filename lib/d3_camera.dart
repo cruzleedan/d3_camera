@@ -11,6 +11,7 @@
 library;
 
 // Camera
+export 'src/camera/aspect_ratio_preset.dart';
 export 'src/camera/camera_capability.dart';
 export 'src/camera/camera_configuration.dart';
 export 'src/camera/camera_controller.dart';

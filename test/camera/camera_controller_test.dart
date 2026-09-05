@@ -49,6 +49,22 @@ void main() {
       expect(controller.value.activeLens, CameraLensDirection.front);
     });
 
+    test('requests the configured initial aspect ratio', () async {
+      final platform = FakeCameraPlatform();
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(
+          initialAspectRatio: AspectRatioPreset.ratio16x9,
+        ),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(platform.lastRequestedAspectRatio, AspectRatioPreset.ratio16x9);
+      expect(controller.value.aspectRatio, AspectRatioPreset.ratio16x9);
+    });
+
     test('populates capability from the platform on success', () async {
       const capability = CameraCapability(
         hasFlash: false,
@@ -418,6 +434,81 @@ void main() {
         () => controller.switchCamera(),
         throwsA(isA<InvalidCameraStateException>()),
       );
+    });
+  });
+
+  group('CustomCameraController.setAspectRatio', () {
+    test('transitions ready -> switchingCamera -> ready, updates aspectRatio', () async {
+      final platform = FakeCameraPlatform();
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      expect(controller.value.aspectRatio, AspectRatioPreset.ratio4x3);
+
+      final statuses = <CameraStatus>[];
+      controller.addListener(() => statuses.add(controller.value.status));
+
+      await controller.setAspectRatio(AspectRatioPreset.ratio16x9);
+
+      expect(statuses, [CameraStatus.switchingCamera, CameraStatus.ready]);
+      expect(controller.value.aspectRatio, AspectRatioPreset.ratio16x9);
+      expect(platform.lastAspectRatioTarget, AspectRatioPreset.ratio16x9);
+    });
+
+    test('clears textureId while switching', () async {
+      final platform = FakeCameraPlatform();
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      int? textureIdDuringSwitch = -1;
+      controller.addListener(() {
+        if (controller.value.status == CameraStatus.switchingCamera) {
+          textureIdDuringSwitch = controller.value.textureId;
+        }
+      });
+
+      await controller.setAspectRatio(AspectRatioPreset.ratio16x9);
+
+      expect(textureIdDuringSwitch, isNull);
+      expect(controller.value.textureId, isNotNull);
+    });
+
+    test('throws InvalidCameraStateException if not ready', () async {
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: FakeCameraPlatform(),
+      );
+      addTearDown(controller.dispose);
+
+      expect(
+        () => controller.setAspectRatio(AspectRatioPreset.ratio16x9),
+        throwsA(isA<InvalidCameraStateException>()),
+      );
+    });
+
+    test('transitions to error and rethrows on platform failure', () async {
+      final platform = FakeCameraPlatform(
+        setAspectRatioError: const CameraInitializationException('rebind failed'),
+      );
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      await expectLater(
+        controller.setAspectRatio(AspectRatioPreset.ratio16x9),
+        throwsA(isA<CameraInitializationException>()),
+      );
+      expect(controller.value.status, CameraStatus.error);
     });
   });
 

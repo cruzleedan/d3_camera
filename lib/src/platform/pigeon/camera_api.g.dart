@@ -113,6 +113,17 @@ enum LensDirection {
   back,
 }
 
+/// Preview/capture aspect ratio, matching the presets native camera apps
+/// expose (Pixel Camera, iOS Camera both default to 4:3 with a 16:9
+/// toggle). Applied identically to Preview and ImageCapture via a shared
+/// CameraX ResolutionSelector/AspectRatioStrategy, so what's framed live
+/// always matches what's captured -- see CameraXSession's own docs on
+/// why both use cases must share one strategy.
+enum AspectRatioPresetData {
+  ratio4x3,
+  ratio16x9,
+}
+
 /// Flash behavior for still capture. Auto and on are only meaningful on
 /// lenses with a flash unit -- see [CameraCapabilityData.hasFlash].
 enum FlashModeData {
@@ -217,13 +228,15 @@ class CameraCapabilityData {
   }
 }
 
-/// Result of [CameraHostApi.initialize]: the detected capability plus the
-/// Flutter texture id the bound preview is publishing to. Bundled into
-/// one response because CameraX binds Preview as part of the same
-/// bindToLifecycle() call that produces the capability-bearing CameraInfo
-/// -- there is no separate "preview ready" moment to report.
-class InitializeResult {
-  InitializeResult({
+/// Result of any [CameraHostApi] call that (re)binds the CameraX session:
+/// [CameraHostApi.initialize], [CameraHostApi.switchCamera], and
+/// [CameraHostApi.setAspectRatio] all rebind the whole use-case group in
+/// one bindToLifecycle() call and so all three can affect every field
+/// here -- texture id, preview resolution, sensor orientation, and
+/// capability are re-read fresh after every rebind, never assumed to
+/// carry over from a previous binding.
+class CameraSessionResultData {
+  CameraSessionResultData({
     required this.capability,
     required this.textureId,
     required this.previewWidth,
@@ -268,9 +281,9 @@ class InitializeResult {
   Object encode() {
     return _toList();  }
 
-  static InitializeResult decode(Object result) {
+  static CameraSessionResultData decode(Object result) {
     result as List<Object?>;
-    return InitializeResult(
+    return CameraSessionResultData(
       capability: result[0]! as CameraCapabilityData,
       textureId: result[1]! as int,
       previewWidth: result[2]! as int,
@@ -282,7 +295,7 @@ class InitializeResult {
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
   bool operator ==(Object other) {
-    if (other is! InitializeResult || other.runtimeType != runtimeType) {
+    if (other is! CameraSessionResultData || other.runtimeType != runtimeType) {
       return false;
     }
     if (identical(this, other)) {
@@ -297,77 +310,7 @@ class InitializeResult {
 
   @override
   String toString() {
-    return 'InitializeResult(capability: $capability, textureId: $textureId, previewWidth: $previewWidth, previewHeight: $previewHeight, sensorOrientationDegrees: $sensorOrientationDegrees)';
-  }
-}
-
-/// Result of [CameraHostApi.switchCamera]: mirrors [InitializeResult]
-/// since switching cameras rebinds the whole CameraX use-case group,
-/// including Preview -- the texture id (and possibly the preview
-/// resolution/sensor orientation) may change and capability must be
-/// re-read for the newly bound lens.
-class SwitchCameraResult {
-  SwitchCameraResult({
-    required this.capability,
-    required this.textureId,
-    required this.previewWidth,
-    required this.previewHeight,
-    required this.sensorOrientationDegrees,
-  });
-
-  CameraCapabilityData capability;
-
-  int textureId;
-
-  int previewWidth;
-
-  int previewHeight;
-
-  int sensorOrientationDegrees;
-
-  List<Object?> _toList() {
-    return <Object?>[
-      capability,
-      textureId,
-      previewWidth,
-      previewHeight,
-      sensorOrientationDegrees,
-    ];
-  }
-
-  Object encode() {
-    return _toList();  }
-
-  static SwitchCameraResult decode(Object result) {
-    result as List<Object?>;
-    return SwitchCameraResult(
-      capability: result[0]! as CameraCapabilityData,
-      textureId: result[1]! as int,
-      previewWidth: result[2]! as int,
-      previewHeight: result[3]! as int,
-      sensorOrientationDegrees: result[4]! as int,
-    );
-  }
-
-  @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  bool operator ==(Object other) {
-    if (other is! SwitchCameraResult || other.runtimeType != runtimeType) {
-      return false;
-    }
-    if (identical(this, other)) {
-      return true;
-    }
-    return _deepEquals(capability, other.capability) && _deepEquals(textureId, other.textureId) && _deepEquals(previewWidth, other.previewWidth) && _deepEquals(previewHeight, other.previewHeight) && _deepEquals(sensorOrientationDegrees, other.sensorOrientationDegrees);
-  }
-
-  @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
-
-  @override
-  String toString() {
-    return 'SwitchCameraResult(capability: $capability, textureId: $textureId, previewWidth: $previewWidth, previewHeight: $previewHeight, sensorOrientationDegrees: $sensorOrientationDegrees)';
+    return 'CameraSessionResultData(capability: $capability, textureId: $textureId, previewWidth: $previewWidth, previewHeight: $previewHeight, sensorOrientationDegrees: $sensorOrientationDegrees)';
   }
 }
 
@@ -556,19 +499,19 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is LensDirection) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    }    else if (value is FlashModeData) {
+    }    else if (value is AspectRatioPresetData) {
       buffer.putUint8(130);
       writeValue(buffer, value.index);
-    }    else if (value is NativeCameraEvent) {
+    }    else if (value is FlashModeData) {
       buffer.putUint8(131);
       writeValue(buffer, value.index);
-    }    else if (value is CameraCapabilityData) {
+    }    else if (value is NativeCameraEvent) {
       buffer.putUint8(132);
-      writeValue(buffer, value.encode());
-    }    else if (value is InitializeResult) {
+      writeValue(buffer, value.index);
+    }    else if (value is CameraCapabilityData) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    }    else if (value is SwitchCameraResult) {
+    }    else if (value is CameraSessionResultData) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
     }    else if (value is NormalizedPointData) {
@@ -593,16 +536,17 @@ class _PigeonCodec extends StandardMessageCodec {
         return value == null ? null : LensDirection.values[value];
       case 130:
         final value = readValue(buffer) as int?;
-        return value == null ? null : FlashModeData.values[value];
+        return value == null ? null : AspectRatioPresetData.values[value];
       case 131:
         final value = readValue(buffer) as int?;
-        return value == null ? null : NativeCameraEvent.values[value];
+        return value == null ? null : FlashModeData.values[value];
       case 132:
-        return CameraCapabilityData.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : NativeCameraEvent.values[value];
       case 133:
-        return InitializeResult.decode(readValue(buffer)!);
+        return CameraCapabilityData.decode(readValue(buffer)!);
       case 134:
-        return SwitchCameraResult.decode(readValue(buffer)!);
+        return CameraSessionResultData.decode(readValue(buffer)!);
       case 135:
         return NormalizedPointData.decode(readValue(buffer)!);
       case 136:
@@ -636,14 +580,14 @@ class CameraHostApi {
   /// publishing to. Throws (via a FlutterError on the generated Dart
   /// side) if the requested lens direction is unavailable or the camera
   /// permission is not granted.
-  Future<InitializeResult> initialize(LensDirection initialLensDirection) async {
+  Future<CameraSessionResultData> initialize(LensDirection initialLensDirection, AspectRatioPresetData initialAspectRatio) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.d3_camera.CameraHostApi.initialize$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[initialLensDirection]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[initialLensDirection, initialAspectRatio]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
@@ -652,7 +596,7 @@ class CameraHostApi {
         isNullValid: false,
     )
     ;
-    return pigeonVar_replyValue! as InitializeResult;
+    return pigeonVar_replyValue! as CameraSessionResultData;
   }
 
   /// Unbinds the CameraX session and releases the camera. Safe to call
@@ -721,7 +665,7 @@ class CameraHostApi {
   /// Unbinds the current session and rebinds for the opposite lens
   /// direction, returning the newly bound capability and texture id (both
   /// may differ from the previous lens).
-  Future<SwitchCameraResult> switchCamera(LensDirection lensDirection) async {
+  Future<CameraSessionResultData> switchCamera(LensDirection lensDirection) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.d3_camera.CameraHostApi.switchCamera$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -737,7 +681,31 @@ class CameraHostApi {
         isNullValid: false,
     )
     ;
-    return pigeonVar_replyValue! as SwitchCameraResult;
+    return pigeonVar_replyValue! as CameraSessionResultData;
+  }
+
+  /// Unbinds the current session and rebinds with a new
+  /// AspectRatioStrategy for both Preview and ImageCapture, returning the
+  /// newly bound session's texture id and preview resolution (both
+  /// change on this rebind, since a different aspect ratio means a
+  /// different negotiated stream size).
+  Future<CameraSessionResultData> setAspectRatio(AspectRatioPresetData aspectRatio) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.d3_camera.CameraHostApi.setAspectRatio$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[aspectRatio]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as CameraSessionResultData;
   }
 
   /// Sets the zoom ratio. The native side clamps to the device's actual

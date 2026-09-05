@@ -99,6 +99,18 @@ class _CameraDemoScreenState extends State<_CameraDemoScreen> {
     }
   }
 
+  Future<void> _toggleAspectRatio() async {
+    final next = switch (_controller.value.aspectRatio) {
+      AspectRatioPreset.ratio4x3 => AspectRatioPreset.ratio16x9,
+      AspectRatioPreset.ratio16x9 => AspectRatioPreset.ratio4x3,
+    };
+    try {
+      await _controller.setAspectRatio(next);
+    } on CustomCameraException catch (e) {
+      _showError('Aspect ratio change failed: ${e.message}');
+    }
+  }
+
   Future<void> _setMeteringPoint(NormalizedPoint point) async {
     try {
       await _controller.setMeteringPoint(point);
@@ -242,7 +254,12 @@ class _CameraDemoScreenState extends State<_CameraDemoScreen> {
                             ? _toggleFlash
                             : null,
                       ),
-                      const SizedBox(width: 48),
+                      const SizedBox(width: 32),
+                      _AspectRatioButton(
+                        aspectRatio: state.aspectRatio,
+                        onPressed: isReady ? _toggleAspectRatio : null,
+                      ),
+                      const SizedBox(width: 32),
                       _ControlButton(
                         icon: Icons.cameraswitch,
                         onPressed: isReady ? _switchCamera : null,
@@ -270,12 +287,33 @@ class _CaptureReviewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Constrained to its own real aspect ratio via AspectRatio + BoxFit.
+    // contain, rather than plain Image.file inside a bare Center --
+    // Image.file with no explicit fit still scales to fill whatever
+    // space its parent gives it, and an unconstrained Center in a full-
+    // screen Stack hands it the *entire* screen height. Confirmed as a
+    // real, measurable bug via on-device screenshots: the live feed's
+    // own AspectRatio box was letterboxed to 1080x810 (a 4:3 ratio), but
+    // this screen let the captured photo (the same 4:3 ratio, just
+    // portrait-oriented at 3000x4000) fill the whole taller screen
+    // instead, visibly showing more of the photo's vertical extent than
+    // what was actually framed live -- the two need matching contain
+    // behavior, not different available space to fit into.
+    final captureAspectRatio = capture.width / capture.height;
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Center(child: Image.file(File(capture.filePath))),
+          SafeArea(
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: captureAspectRatio,
+                child: Image.file(File(capture.filePath), fit: BoxFit.contain),
+              ),
+            ),
+          ),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -319,6 +357,40 @@ class _ControlButton extends StatelessWidget {
       color: Colors.white,
       disabledColor: Colors.white24,
       style: IconButton.styleFrom(backgroundColor: Colors.black45),
+    );
+  }
+}
+
+/// Toggles between 4:3 and 16:9 -- the two presets native camera apps
+/// (Pixel Camera, iOS Camera) expose, both defaulting to 4:3. A text
+/// label rather than an icon, since "4:3"/"16:9" isn't well represented
+/// by a single glyph the way flash/switch are.
+class _AspectRatioButton extends StatelessWidget {
+  const _AspectRatioButton({required this.aspectRatio, required this.onPressed});
+
+  final AspectRatioPreset aspectRatio;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (aspectRatio) {
+      AspectRatioPreset.ratio4x3 => '4:3',
+      AspectRatioPreset.ratio16x9 => '16:9',
+    };
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        backgroundColor: Colors.black45,
+        foregroundColor: Colors.white,
+        disabledForegroundColor: Colors.white24,
+        shape: const CircleBorder(),
+        padding: const EdgeInsets.all(12),
+        minimumSize: const Size(48, 48),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+      ),
     );
   }
 }

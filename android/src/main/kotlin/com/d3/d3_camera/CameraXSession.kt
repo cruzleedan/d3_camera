@@ -47,6 +47,7 @@ class CameraXSession(
     private var surfaceProducer: TextureRegistry.SurfaceProducer? = null
     private var boundLensDirection: LensDirection? = null
     private var boundSensorOrientationDegrees: Int = 0
+    private var boundAspectRatio: AspectRatioPresetData = AspectRatioPresetData.RATIO4X3
     private val lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get()
 
     /** Result of a successful [bind]: the bound camera, its preview's resolution, and sensor orientation. */
@@ -59,12 +60,15 @@ class CameraXSession(
     )
 
     /**
-     * Binds Preview and ImageCapture use cases for [lensDirection] and
-     * publishes the preview to a newly created Flutter texture. Throws
-     * [IllegalArgumentException] (surfaced by CameraX itself) if no
-     * camera matches [lensDirection].
+     * Binds Preview and ImageCapture use cases for [lensDirection] at
+     * [aspectRatio] and publishes the preview to a newly created Flutter
+     * texture. Throws [IllegalArgumentException] (surfaced by CameraX
+     * itself) if no camera matches [lensDirection].
      */
-    suspend fun bind(lensDirection: LensDirection): BoundSession {
+    suspend fun bind(
+        lensDirection: LensDirection,
+        aspectRatio: AspectRatioPresetData,
+    ): BoundSession {
         val provider = getOrCreateProvider()
         cameraProvider = provider
 
@@ -90,22 +94,19 @@ class CameraXSession(
         // in CustomCameraPreview, via a RotatedBox. That's why this
         // method reports sensorOrientationDegrees in its result instead
         // of trying to solve rotation natively.
+        //
         // Preview and ImageCapture are given the same AspectRatioStrategy
         // so both use cases crop to the same aspect ratio of the sensor's
         // active array -- without this, CameraX selects each use case's
         // resolution independently, and the captured photo's aspect
         // ratio can differ from what was actually framed in the live
-        // preview (confirmed as a real, user-visible mismatch). 4:3 is
-        // used as the fallback-safe default: CameraX's own
-        // ResolutionSelector defaults to it when unset, and it's the
-        // aspect ratio most consistently supported across Android camera
-        // hardware -- see the design doc's own device-compatibility
-        // section on detecting rather than assuming, which applies here:
+        // preview (confirmed as a real, user-visible mismatch).
         // FALLBACK_AUTO_STRATEGY still lets CameraX pick a close match on
-        // hardware that can't produce an exact 4:3 stream.
+        // hardware that can't produce an exact stream of the requested
+        // ratio, per the design doc's detect-never-assume rule.
         val resolutionSelector =
             ResolutionSelector.Builder()
-                .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                .setAspectRatioStrategy(strategyFor(aspectRatio))
                 .build()
 
         val newPreview = Preview.Builder().setResolutionSelector(resolutionSelector).build()
@@ -141,6 +142,7 @@ class CameraXSession(
                 preview = newPreview
                 imageCapture = newImageCapture
                 boundLensDirection = lensDirection
+                boundAspectRatio = aspectRatio
                 boundSensorOrientationDegrees = sensorOrientationDegrees(boundCamera.cameraInfo)
             }
 
@@ -152,6 +154,37 @@ class CameraXSession(
             sensorOrientationDegrees = boundSensorOrientationDegrees,
         )
     }
+
+    /**
+     * Unbinds and rebinds the current lens with a new [aspectRatio],
+     * returning the newly negotiated texture/resolution. Throws
+     * [IllegalStateException] if no session is currently bound -- there
+     * is no lens direction to rebind with.
+     */
+    suspend fun setAspectRatio(aspectRatio: AspectRatioPresetData): BoundSession {
+        val lens =
+            boundLensDirection ?: throw IllegalStateException("No camera session is bound.")
+        return bind(lens, aspectRatio)
+    }
+
+    /**
+     * Unbinds and rebinds [lensDirection], preserving whatever aspect
+     * ratio is currently bound -- switching cameras should not silently
+     * reset a user's 4:3/16:9 choice back to the default. Throws
+     * [IllegalStateException] if no session is currently bound.
+     */
+    suspend fun switchLens(lensDirection: LensDirection): BoundSession {
+        if (boundLensDirection == null) {
+            throw IllegalStateException("No camera session is bound.")
+        }
+        return bind(lensDirection, boundAspectRatio)
+    }
+
+    private fun strategyFor(aspectRatio: AspectRatioPresetData): AspectRatioStrategy =
+        when (aspectRatio) {
+            AspectRatioPresetData.RATIO4X3 -> AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
+            AspectRatioPresetData.RATIO16X9 -> AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY
+        }
 
     private fun sensorOrientationDegrees(cameraInfo: CameraInfo): Int {
         val characteristic =

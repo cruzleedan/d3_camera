@@ -32,6 +32,14 @@ import 'package:pigeon/pigeon.dart';
 /// Which physical camera a session is bound to.
 enum LensDirection { front, back }
 
+/// Preview/capture aspect ratio, matching the presets native camera apps
+/// expose (Pixel Camera, iOS Camera both default to 4:3 with a 16:9
+/// toggle). Applied identically to Preview and ImageCapture via a shared
+/// CameraX ResolutionSelector/AspectRatioStrategy, so what's framed live
+/// always matches what's captured -- see CameraXSession's own docs on
+/// why both use cases must share one strategy.
+enum AspectRatioPresetData { ratio4x3, ratio16x9 }
+
 /// Device-reported limits, read once at initialization time. The
 /// governing rule: detect, never assume -- every field here is queried
 /// from CameraCharacteristics/CameraInfo, never a hardcoded default,
@@ -59,13 +67,15 @@ class CameraCapabilityData {
   final List<LensDirection> availableLenses;
 }
 
-/// Result of [CameraHostApi.initialize]: the detected capability plus the
-/// Flutter texture id the bound preview is publishing to. Bundled into
-/// one response because CameraX binds Preview as part of the same
-/// bindToLifecycle() call that produces the capability-bearing CameraInfo
-/// -- there is no separate "preview ready" moment to report.
-class InitializeResult {
-  const InitializeResult({
+/// Result of any [CameraHostApi] call that (re)binds the CameraX session:
+/// [CameraHostApi.initialize], [CameraHostApi.switchCamera], and
+/// [CameraHostApi.setAspectRatio] all rebind the whole use-case group in
+/// one bindToLifecycle() call and so all three can affect every field
+/// here -- texture id, preview resolution, sensor orientation, and
+/// capability are re-read fresh after every rebind, never assumed to
+/// carry over from a previous binding.
+class CameraSessionResultData {
+  const CameraSessionResultData({
     required this.capability,
     required this.textureId,
     required this.previewWidth,
@@ -93,27 +103,6 @@ class InitializeResult {
   /// value -- mirroring the same fix Flutter's own official
   /// camera_android_camerax plugin applies (flutter/packages#8629)
   /// after hitting the identical bug.
-  final int sensorOrientationDegrees;
-}
-
-/// Result of [CameraHostApi.switchCamera]: mirrors [InitializeResult]
-/// since switching cameras rebinds the whole CameraX use-case group,
-/// including Preview -- the texture id (and possibly the preview
-/// resolution/sensor orientation) may change and capability must be
-/// re-read for the newly bound lens.
-class SwitchCameraResult {
-  const SwitchCameraResult({
-    required this.capability,
-    required this.textureId,
-    required this.previewWidth,
-    required this.previewHeight,
-    required this.sensorOrientationDegrees,
-  });
-
-  final CameraCapabilityData capability;
-  final int textureId;
-  final int previewWidth;
-  final int previewHeight;
   final int sensorOrientationDegrees;
 }
 
@@ -178,7 +167,10 @@ abstract class CameraHostApi {
   /// side) if the requested lens direction is unavailable or the camera
   /// permission is not granted.
   @async
-  InitializeResult initialize(LensDirection initialLensDirection);
+  CameraSessionResultData initialize(
+    LensDirection initialLensDirection,
+    AspectRatioPresetData initialAspectRatio,
+  );
 
   /// Unbinds the CameraX session and releases the camera. Safe to call
   /// from any state; calling it twice is a no-op, not an error.
@@ -201,7 +193,15 @@ abstract class CameraHostApi {
   /// direction, returning the newly bound capability and texture id (both
   /// may differ from the previous lens).
   @async
-  SwitchCameraResult switchCamera(LensDirection lensDirection);
+  CameraSessionResultData switchCamera(LensDirection lensDirection);
+
+  /// Unbinds the current session and rebinds with a new
+  /// AspectRatioStrategy for both Preview and ImageCapture, returning the
+  /// newly bound session's texture id and preview resolution (both
+  /// change on this rebind, since a different aspect ratio means a
+  /// different negotiated stream size).
+  @async
+  CameraSessionResultData setAspectRatio(AspectRatioPresetData aspectRatio);
 
   /// Sets the zoom ratio. The native side clamps to the device's actual
   /// range as a defensive backstop -- see

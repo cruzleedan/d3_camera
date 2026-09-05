@@ -1,5 +1,6 @@
 import 'dart:ui' show Size;
 
+import '../camera/aspect_ratio_preset.dart';
 import '../camera/camera_capability.dart';
 import '../camera/capture_result.dart';
 import '../camera/flash_mode.dart';
@@ -57,10 +58,14 @@ class CameraSessionInfo {
 /// real hardware; a future iOS implementation attaches here too.
 abstract class CameraPlatform {
   /// Binds a camera session (Preview + ImageCapture use cases) for
-  /// [initialLensDirection] and returns the detected device capability
-  /// plus the bound preview's texture id. Throws a `CustomCameraException`
-  /// subtype on failure — never a raw platform exception.
-  Future<CameraSessionInfo> initialize(CameraLensDirection initialLensDirection);
+  /// [initialLensDirection] at [initialAspectRatio] and returns the
+  /// detected device capability plus the bound preview's texture id.
+  /// Throws a `CustomCameraException` subtype on failure — never a raw
+  /// platform exception.
+  Future<CameraSessionInfo> initialize(
+    CameraLensDirection initialLensDirection,
+    AspectRatioPreset initialAspectRatio,
+  );
 
   /// Unbinds the camera session. Safe to call from any state, including
   /// when no session is bound — a no-op, not an error.
@@ -75,6 +80,13 @@ abstract class CameraPlatform {
   /// Unbinds the current session and rebinds for [lensDirection],
   /// returning the newly bound capability and texture id.
   Future<CameraSessionInfo> switchCamera(CameraLensDirection lensDirection);
+
+  /// Unbinds the current session and rebinds with [aspectRatio] applied
+  /// to both Preview and ImageCapture, returning the newly bound
+  /// session's texture id and preview resolution (both change on this
+  /// rebind, since a different aspect ratio means a different
+  /// negotiated stream size).
+  Future<CameraSessionInfo> setAspectRatio(AspectRatioPreset aspectRatio);
 
   /// Sets the zoom ratio. Callers are expected to have already clamped
   /// via `CameraCapability.clampZoom` — this exists as the platform call,

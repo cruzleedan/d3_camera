@@ -31,6 +31,7 @@ class FakeCameraPlatform implements CameraPlatform {
     this.captureError,
     this.setFlashModeError,
     this.switchCameraError,
+    this.setAspectRatioError,
   });
 
   /// Returned by [initialize]/[switchCamera] when their respective error
@@ -54,12 +55,18 @@ class FakeCameraPlatform implements CameraPlatform {
   /// When set, [switchCamera] throws this instead of succeeding.
   CustomCameraException? switchCameraError;
 
+  /// When set, [setAspectRatio] throws this instead of succeeding.
+  CustomCameraException? setAspectRatioError;
+
   int initializeCallCount = 0;
   int disposeCallCount = 0;
   int captureImageCallCount = 0;
   int switchCameraCallCount = 0;
+  int setAspectRatioCallCount = 0;
   CameraLensDirection? lastRequestedLensDirection;
+  AspectRatioPreset? lastRequestedAspectRatio;
   CameraLensDirection? lastSwitchTarget;
+  AspectRatioPreset? lastAspectRatioTarget;
   FlashMode? lastFlashMode;
   double? lastZoomRatio;
   double? lastExposureCompensation;
@@ -85,9 +92,11 @@ class FakeCameraPlatform implements CameraPlatform {
   @override
   Future<CameraSessionInfo> initialize(
     CameraLensDirection initialLensDirection,
+    AspectRatioPreset initialAspectRatio,
   ) async {
     initializeCallCount++;
     lastRequestedLensDirection = initialLensDirection;
+    lastRequestedAspectRatio = initialAspectRatio;
     final error = initializeError;
     if (error != null) throw error;
     return CameraSessionInfo(
@@ -125,6 +134,20 @@ class FakeCameraPlatform implements CameraPlatform {
     switchCameraCallCount++;
     lastSwitchTarget = lensDirection;
     final error = switchCameraError;
+    if (error != null) throw error;
+    return CameraSessionInfo(
+      capability: capabilityToReturn,
+      textureId: textureIdToReturn,
+      previewSize: previewSizeToReturn,
+      sensorOrientationDegrees: sensorOrientationDegreesToReturn,
+    );
+  }
+
+  @override
+  Future<CameraSessionInfo> setAspectRatio(AspectRatioPreset aspectRatio) async {
+    setAspectRatioCallCount++;
+    lastAspectRatioTarget = aspectRatio;
+    final error = setAspectRatioError;
     if (error != null) throw error;
     return CameraSessionInfo(
       capability: capabilityToReturn,

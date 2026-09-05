@@ -214,6 +214,25 @@ enum class LensDirection(val raw: Int) {
 }
 
 /**
+ * Preview/capture aspect ratio, matching the presets native camera apps
+ * expose (Pixel Camera, iOS Camera both default to 4:3 with a 16:9
+ * toggle). Applied identically to Preview and ImageCapture via a shared
+ * CameraX ResolutionSelector/AspectRatioStrategy, so what's framed live
+ * always matches what's captured -- see CameraXSession's own docs on
+ * why both use cases must share one strategy.
+ */
+enum class AspectRatioPresetData(val raw: Int) {
+  RATIO4X3(0),
+  RATIO16X9(1);
+
+  companion object {
+    fun ofRaw(raw: Int): AspectRatioPresetData? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
+/**
  * Flash behavior for still capture. Auto and on are only meaningful on
  * lenses with a flash unit -- see [CameraCapabilityData.hasFlash].
  */
@@ -322,15 +341,17 @@ data class CameraCapabilityData (
 }
 
 /**
- * Result of [CameraHostApi.initialize]: the detected capability plus the
- * Flutter texture id the bound preview is publishing to. Bundled into
- * one response because CameraX binds Preview as part of the same
- * bindToLifecycle() call that produces the capability-bearing CameraInfo
- * -- there is no separate "preview ready" moment to report.
+ * Result of any [CameraHostApi] call that (re)binds the CameraX session:
+ * [CameraHostApi.initialize], [CameraHostApi.switchCamera], and
+ * [CameraHostApi.setAspectRatio] all rebind the whole use-case group in
+ * one bindToLifecycle() call and so all three can affect every field
+ * here -- texture id, preview resolution, sensor orientation, and
+ * capability are re-read fresh after every rebind, never assumed to
+ * carry over from a previous binding.
  *
  * Generated class from Pigeon that represents data sent in messages.
  */
-data class InitializeResult (
+data class CameraSessionResultData (
   val capability: CameraCapabilityData,
   val textureId: Long,
   /**
@@ -357,13 +378,13 @@ data class InitializeResult (
 )
  {
   companion object {
-    fun fromList(pigeonVar_list: List<Any?>): InitializeResult {
+    fun fromList(pigeonVar_list: List<Any?>): CameraSessionResultData {
       val capability = pigeonVar_list[0] as CameraCapabilityData
       val textureId = pigeonVar_list[1] as Long
       val previewWidth = pigeonVar_list[2] as Long
       val previewHeight = pigeonVar_list[3] as Long
       val sensorOrientationDegrees = pigeonVar_list[4] as Long
-      return InitializeResult(capability, textureId, previewWidth, previewHeight, sensorOrientationDegrees)
+      return CameraSessionResultData(capability, textureId, previewWidth, previewHeight, sensorOrientationDegrees)
     }
   }
   fun toList(): List<Any?> {
@@ -382,7 +403,7 @@ data class InitializeResult (
     if (this === other) {
       return true
     }
-    val other = other as InitializeResult
+    val other = other as CameraSessionResultData
     return CameraApiPigeonUtils.deepEquals(this.capability, other.capability) && CameraApiPigeonUtils.deepEquals(this.textureId, other.textureId) && CameraApiPigeonUtils.deepEquals(this.previewWidth, other.previewWidth) && CameraApiPigeonUtils.deepEquals(this.previewHeight, other.previewHeight) && CameraApiPigeonUtils.deepEquals(this.sensorOrientationDegrees, other.sensorOrientationDegrees)
   }
 
@@ -396,68 +417,7 @@ data class InitializeResult (
     return result
   }
   override fun toString(): String {
-    return "InitializeResult(capability=$capability, textureId=$textureId, previewWidth=$previewWidth, previewHeight=$previewHeight, sensorOrientationDegrees=$sensorOrientationDegrees)"
-  }
-}
-
-/**
- * Result of [CameraHostApi.switchCamera]: mirrors [InitializeResult]
- * since switching cameras rebinds the whole CameraX use-case group,
- * including Preview -- the texture id (and possibly the preview
- * resolution/sensor orientation) may change and capability must be
- * re-read for the newly bound lens.
- *
- * Generated class from Pigeon that represents data sent in messages.
- */
-data class SwitchCameraResult (
-  val capability: CameraCapabilityData,
-  val textureId: Long,
-  val previewWidth: Long,
-  val previewHeight: Long,
-  val sensorOrientationDegrees: Long
-)
- {
-  companion object {
-    fun fromList(pigeonVar_list: List<Any?>): SwitchCameraResult {
-      val capability = pigeonVar_list[0] as CameraCapabilityData
-      val textureId = pigeonVar_list[1] as Long
-      val previewWidth = pigeonVar_list[2] as Long
-      val previewHeight = pigeonVar_list[3] as Long
-      val sensorOrientationDegrees = pigeonVar_list[4] as Long
-      return SwitchCameraResult(capability, textureId, previewWidth, previewHeight, sensorOrientationDegrees)
-    }
-  }
-  fun toList(): List<Any?> {
-    return listOf(
-      capability,
-      textureId,
-      previewWidth,
-      previewHeight,
-      sensorOrientationDegrees,
-    )
-  }
-  override fun equals(other: Any?): Boolean {
-    if (other == null || other.javaClass != javaClass) {
-      return false
-    }
-    if (this === other) {
-      return true
-    }
-    val other = other as SwitchCameraResult
-    return CameraApiPigeonUtils.deepEquals(this.capability, other.capability) && CameraApiPigeonUtils.deepEquals(this.textureId, other.textureId) && CameraApiPigeonUtils.deepEquals(this.previewWidth, other.previewWidth) && CameraApiPigeonUtils.deepEquals(this.previewHeight, other.previewHeight) && CameraApiPigeonUtils.deepEquals(this.sensorOrientationDegrees, other.sensorOrientationDegrees)
-  }
-
-  override fun hashCode(): Int {
-    var result = javaClass.hashCode()
-    result = 31 * result + CameraApiPigeonUtils.deepHash(this.capability)
-    result = 31 * result + CameraApiPigeonUtils.deepHash(this.textureId)
-    result = 31 * result + CameraApiPigeonUtils.deepHash(this.previewWidth)
-    result = 31 * result + CameraApiPigeonUtils.deepHash(this.previewHeight)
-    result = 31 * result + CameraApiPigeonUtils.deepHash(this.sensorOrientationDegrees)
-    return result
-  }
-  override fun toString(): String {
-    return "SwitchCameraResult(capability=$capability, textureId=$textureId, previewWidth=$previewWidth, previewHeight=$previewHeight, sensorOrientationDegrees=$sensorOrientationDegrees)"
+    return "CameraSessionResultData(capability=$capability, textureId=$textureId, previewWidth=$previewWidth, previewHeight=$previewHeight, sensorOrientationDegrees=$sensorOrientationDegrees)"
   }
 }
 
@@ -622,27 +582,27 @@ private open class CameraApiPigeonCodec : StandardMessageCodec() {
       }
       130.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
-          FlashModeData.ofRaw(it.toInt())
+          AspectRatioPresetData.ofRaw(it.toInt())
         }
       }
       131.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
-          NativeCameraEvent.ofRaw(it.toInt())
+          FlashModeData.ofRaw(it.toInt())
         }
       }
       132.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          CameraCapabilityData.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          NativeCameraEvent.ofRaw(it.toInt())
         }
       }
       133.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          InitializeResult.fromList(it)
+          CameraCapabilityData.fromList(it)
         }
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          SwitchCameraResult.fromList(it)
+          CameraSessionResultData.fromList(it)
         }
       }
       135.toByte() -> {
@@ -669,23 +629,23 @@ private open class CameraApiPigeonCodec : StandardMessageCodec() {
         stream.write(129)
         writeValue(stream, value.raw.toLong())
       }
-      is FlashModeData -> {
+      is AspectRatioPresetData -> {
         stream.write(130)
         writeValue(stream, value.raw.toLong())
       }
-      is NativeCameraEvent -> {
+      is FlashModeData -> {
         stream.write(131)
         writeValue(stream, value.raw.toLong())
       }
-      is CameraCapabilityData -> {
+      is NativeCameraEvent -> {
         stream.write(132)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw.toLong())
       }
-      is InitializeResult -> {
+      is CameraCapabilityData -> {
         stream.write(133)
         writeValue(stream, value.toList())
       }
-      is SwitchCameraResult -> {
+      is CameraSessionResultData -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
@@ -722,7 +682,7 @@ interface CameraHostApi {
    * side) if the requested lens direction is unavailable or the camera
    * permission is not granted.
    */
-  suspend fun initialize(initialLensDirection: LensDirection): InitializeResult
+  suspend fun initialize(initialLensDirection: LensDirection, initialAspectRatio: AspectRatioPresetData): CameraSessionResultData
   /**
    * Unbinds the CameraX session and releases the camera. Safe to call
    * from any state; calling it twice is a no-op, not an error.
@@ -745,7 +705,15 @@ interface CameraHostApi {
    * direction, returning the newly bound capability and texture id (both
    * may differ from the previous lens).
    */
-  suspend fun switchCamera(lensDirection: LensDirection): SwitchCameraResult
+  suspend fun switchCamera(lensDirection: LensDirection): CameraSessionResultData
+  /**
+   * Unbinds the current session and rebinds with a new
+   * AspectRatioStrategy for both Preview and ImageCapture, returning the
+   * newly bound session's texture id and preview resolution (both
+   * change on this rebind, since a different aspect ratio means a
+   * different negotiated stream size).
+   */
+  suspend fun setAspectRatio(aspectRatio: AspectRatioPresetData): CameraSessionResultData
   /**
    * Sets the zoom ratio. The native side clamps to the device's actual
    * range as a defensive backstop -- see
@@ -785,9 +753,10 @@ interface CameraHostApi {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
             val initialLensDirectionArg = args[0] as LensDirection
+            val initialAspectRatioArg = args[1] as AspectRatioPresetData
             CoroutineScope(Dispatchers.Main).launch {
               val wrapped: List<Any?> = try {
-                listOf(api.initialize(initialLensDirectionArg))
+                listOf(api.initialize(initialLensDirectionArg, initialAspectRatioArg))
               } catch (exception: Throwable) {
                 CameraApiPigeonUtils.wrapError(exception)
               }
@@ -862,6 +831,25 @@ interface CameraHostApi {
             CoroutineScope(Dispatchers.Main).launch {
               val wrapped: List<Any?> = try {
                 listOf(api.switchCamera(lensDirectionArg))
+              } catch (exception: Throwable) {
+                CameraApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.d3_camera.CameraHostApi.setAspectRatio$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val aspectRatioArg = args[0] as AspectRatioPresetData
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.setAspectRatio(aspectRatioArg))
               } catch (exception: Throwable) {
                 CameraApiPigeonUtils.wrapError(exception)
               }

@@ -2,6 +2,7 @@ import 'dart:ui' show Size;
 
 import 'package:flutter/services.dart' show PlatformException;
 
+import '../camera/aspect_ratio_preset.dart';
 import '../camera/camera_capability.dart';
 import '../camera/capture_result.dart';
 import '../camera/flash_mode.dart';
@@ -36,9 +37,11 @@ class MethodChannelCameraPlatform extends pigeon.CameraFlutterApi
   @override
   Future<CameraSessionInfo> initialize(
     CameraLensDirection initialLensDirection,
+    AspectRatioPreset initialAspectRatio,
   ) => _guard(() async {
     final result = await _hostApi.initialize(
       _toPigeonLensDirection(initialLensDirection),
+      _toPigeonAspectRatio(initialAspectRatio),
     );
     return _fromPigeonSessionInfo(
       result.capability,
@@ -75,6 +78,21 @@ class MethodChannelCameraPlatform extends pigeon.CameraFlutterApi
       _guard(() async {
         final result = await _hostApi.switchCamera(
           _toPigeonLensDirection(lensDirection),
+        );
+        return _fromPigeonSessionInfo(
+          result.capability,
+          result.textureId,
+          result.previewWidth,
+          result.previewHeight,
+          result.sensorOrientationDegrees,
+        );
+      });
+
+  @override
+  Future<CameraSessionInfo> setAspectRatio(AspectRatioPreset aspectRatio) =>
+      _guard(() async {
+        final result = await _hostApi.setAspectRatio(
+          _toPigeonAspectRatio(aspectRatio),
         );
         return _fromPigeonSessionInfo(
           result.capability,
@@ -152,6 +170,15 @@ pigeon.LensDirection _toPigeonLensDirection(CameraLensDirection direction) {
       return pigeon.LensDirection.front;
     case CameraLensDirection.back:
       return pigeon.LensDirection.back;
+  }
+}
+
+pigeon.AspectRatioPresetData _toPigeonAspectRatio(AspectRatioPreset preset) {
+  switch (preset) {
+    case AspectRatioPreset.ratio4x3:
+      return pigeon.AspectRatioPresetData.ratio4x3;
+    case AspectRatioPreset.ratio16x9:
+      return pigeon.AspectRatioPresetData.ratio16x9;
   }
 }
 
