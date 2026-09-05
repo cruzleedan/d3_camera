@@ -1,0 +1,36 @@
+name: d3_camera
+description: >-
+  A customizable Flutter camera package: live preview, capture, zoom/focus/
+  exposure control, and image annotation (shapes, arrows, text) as reusable
+  Dart primitives. CameraX-backed on Android. No predefined camera UI.
+version: 0.0.1
+homepage: https://github.com/cruzleedan/d3_camera
+repository: https://github.com/cruzleedan/d3_camera
+issue_tracker: https://github.com/cruzleedan/d3_camera/issues
+
+topics:
+  - camera
+  - annotation
+  - camerax
+  - image
+
+environment:
+  sdk: ">=3.13.0 <4.0.0"
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  plugin_platform_interface: ^2.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.d3.d3_camera
+        pluginClass: D3CameraPlugin
