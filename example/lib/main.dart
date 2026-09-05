@@ -98,6 +98,7 @@ class _EmbeddedScreenDemo extends StatelessWidget {
       ),
       showAspectRatioToggle: false,
       showFlashToggle: false,
+      onClose: () => Navigator.of(context).pop(),
       onCaptured: (capture) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(

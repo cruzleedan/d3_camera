@@ -33,6 +33,8 @@ void main() {
     FakeCameraPlatform platform, {
     bool enablePinchToZoom = true,
     bool showZoomBar = true,
+    bool showCloseButton = true,
+    VoidCallback? onClose,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -40,6 +42,8 @@ void main() {
           platform: platform,
           enablePinchToZoom: enablePinchToZoom,
           showZoomBar: showZoomBar,
+          showCloseButton: showCloseButton,
+          onClose: onClose,
         ),
       ),
     );
@@ -92,25 +96,28 @@ void main() {
       },
     );
 
-    testWidgets('zoom bar overlays the feed rather than sitting below it', (
-      tester,
-    ) async {
+    testWidgets('the feed extends under the controls at 16:9', (tester) async {
       tester.view.physicalSize = const Size(1080, 2424);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
+      // Controls are anchored to the screen, not the feed, so whether
+      // they overlay it depends on the ratio: at 16:9 the feed is tall
+      // enough to run behind them. Asserted as "the feed reaches past
+      // where a 4:3 feed would end" rather than against the shutter's
+      // exact position, which shifts with the device's insets.
       final platform = FakeCameraPlatform(
-        previewSizeToReturn: const Size(4000, 3000),
+        previewSizeToReturn: const Size(1920, 1080),
         sensorOrientationDegreesToReturn: 90,
       );
       await pumpScreen(tester, platform);
 
       final feedRect = tester.getRect(find.byType(CustomCameraPreview));
-      final zoomRect = tester.getRect(find.byType(D3ZoomLevelBar));
+      expect(feedRect.height, closeTo(1920, 1));
       expect(
-        zoomRect.top,
-        lessThan(feedRect.bottom),
-        reason: 'zoom bar should sit on the feed, not under it',
+        feedRect.bottom,
+        greaterThan(1440),
+        reason: 'a 16:9 feed must extend well past a 4:3 one',
       );
     });
   });
@@ -189,6 +196,112 @@ void main() {
       await tester.pump();
 
       expect(platform.lastZoomRatio, isNull);
+    });
+  });
+
+  group('D3CameraScreen close button', () {
+    testWidgets('calls onClose when supplied', (tester) async {
+      var closed = false;
+      await pumpScreen(
+        tester,
+        FakeCameraPlatform(),
+        onClose: () => closed = true,
+      );
+
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pump();
+
+      expect(closed, isTrue);
+    });
+
+    testWidgets('pops its route when no onClose is given', (tester) async {
+      final platform = FakeCameraPlatform();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => D3CameraScreen(platform: platform),
+                ),
+              ),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.byType(D3CameraScreen), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(D3CameraScreen), findsNothing);
+      expect(find.text('open'), findsOneWidget);
+    });
+
+    testWidgets('is absent when showCloseButton is false', (tester) async {
+      await pumpScreen(
+        tester,
+        FakeCameraPlatform(),
+        showCloseButton: false,
+      );
+
+      expect(find.byIcon(Icons.close), findsNothing);
+    });
+  });
+
+  group('D3CameraScreen control anchoring', () {
+    testWidgets('controls stay at the screen bottom across aspect ratios', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1080, 2424);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      // 4:3 sensor-space -> 3:4 displayed, a feed shorter than the
+      // screen. The shutter must still sit at the bottom rather than
+      // riding up to hug the feed's lower edge.
+      await pumpScreen(
+        tester,
+        FakeCameraPlatform(
+          previewSizeToReturn: const Size(4000, 3000),
+          sensorOrientationDegreesToReturn: 90,
+        ),
+      );
+      final shutter43 = tester.getRect(find.byType(D3ShutterButton));
+
+      await pumpScreen(
+        tester,
+        FakeCameraPlatform(
+          previewSizeToReturn: const Size(1920, 1080),
+          sensorOrientationDegreesToReturn: 90,
+        ),
+      );
+      final shutter169 = tester.getRect(find.byType(D3ShutterButton));
+
+      expect(
+        shutter43.bottom,
+        shutter169.bottom,
+        reason: 'shutter position must not move when the ratio changes',
+      );
+    });
+
+    testWidgets('zoom bar renders at its natural height, unclipped', (
+      tester,
+    ) async {
+      // The bar was previously forced into a 32px SizedBox, which cut
+      // the pill labels off vertically.
+      await pumpScreen(tester, FakeCameraPlatform());
+
+      final bar = tester.getSize(find.byType(D3ZoomLevelBar));
+      expect(
+        bar.height,
+        greaterThan(32),
+        reason: 'a 32px cap is what clipped the labels',
+      );
     });
   });
 }

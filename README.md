@@ -67,9 +67,20 @@ final capture = await D3CameraScreen.show(
 );
 ```
 
-Live preview, shutter, zoom, flash, 4:3/16:9 toggle, camera switch,
-tap-to-focus and a post-capture review screen. Individual controls can be
-switched off (`showFlashToggle: false`, …).
+Live preview, shutter, pinch- and tap-to-zoom, flash, 4:3/16:9 toggle,
+camera switch, tap-to-focus, a close button, and a post-capture review
+screen. Individual controls can be switched off (`showFlashToggle:
+false`, …).
+
+When the screen is embedded rather than pushed, give it an `onClose` so
+its close button does something meaningful in your own flow:
+
+```dart
+D3CameraScreen(
+  onClose: () => Navigator.of(context).pop(),
+  onCaptured: (capture) { /* … */ },
+)
+```
 
 ### 2. Lifecycle handled, UI yours
 

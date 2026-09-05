@@ -44,6 +44,8 @@ class D3CameraScreen extends StatefulWidget {
     this.showCameraSwitch = true,
     this.showZoomBar = true,
     this.enablePinchToZoom = true,
+    this.onClose,
+    this.showCloseButton = true,
     @visibleForTesting this.platform,
   });
 
@@ -71,6 +73,20 @@ class D3CameraScreen extends StatefulWidget {
   /// discrete steps. Independent of [showZoomBar] -- pinch alone is a
   /// reasonable setup when screen space is tight.
   final bool enablePinchToZoom;
+
+  /// Called when the user dismisses the camera with the close button,
+  /// having taken no photo.
+  ///
+  /// When null (and [showCloseButton] is left true) the screen pops its
+  /// own route, which is what [show] relies on. Supply this when the
+  /// screen is embedded rather than pushed, so closing does something
+  /// meaningful in your own flow.
+  final VoidCallback? onClose;
+
+  /// Shows a close button in the top-left corner. A camera with no way
+  /// out but the system back gesture is a dead end on any screen that
+  /// isn't the app's root.
+  final bool showCloseButton;
 
   /// Injectable platform for tests; see [D3CameraScope.platform].
   @visibleForTesting
@@ -173,6 +189,21 @@ class _CameraScreenBody extends StatelessWidget {
     }
   }
 
+  /// Dismisses the camera: the consumer's own handler when given,
+  /// otherwise popping this screen's route (what [D3CameraScreen.show]
+  /// relies on). Falls through silently when neither applies -- a
+  /// rootless embedded screen with no onClose has nowhere to go, and
+  /// popping the app's only route would be worse than doing nothing.
+  void _close(BuildContext context) {
+    final onClose = config.onClose;
+    if (onClose != null) {
+      onClose();
+      return;
+    }
+    final navigator = Navigator.maybeOf(context);
+    if (navigator?.canPop() ?? false) navigator!.pop();
+  }
+
   void _showError(BuildContext context, String message) {
     final messenger = ScaffoldMessenger.maybeOf(context);
     messenger?.showSnackBar(SnackBar(content: Text(message)));
@@ -192,20 +223,6 @@ class _CameraScreenBody extends StatelessWidget {
     final previewAspectRatio = displaySize == null
         ? 3 / 4
         : displaySize.width / displaySize.height;
-
-    // Where the feed's bottom edge lands, so the controls can hug it.
-    // At 16:9 the feed runs past the screen bottom and the controls stay
-    // pinned to the screen; at 4:3 it ends partway down and the controls
-    // ride up to sit on the feed rather than stranding the zoom bar in
-    // the black band below it.
-    final media = MediaQuery.of(context);
-    final feedTop = media.padding.top;
-    final feedHeight = media.size.width / previewAspectRatio;
-    final feedBottom = feedTop + feedHeight;
-    final bottomInset = (media.size.height - feedBottom).clamp(
-      media.padding.bottom,
-      double.infinity,
-    );
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -248,12 +265,24 @@ class _CameraScreenBody extends StatelessWidget {
             ),
           ),
 
-          // Controls overlay the feed's lower edge rather than sitting
-          // in their own reserved strip, so the feed keeps full width at
-          // every ratio -- zoom directly above the shutter, with
-          // flash/ratio/switch below, matching Pixel and iOS Camera.
-          Padding(
-            padding: EdgeInsets.only(bottom: bottomInset),
+          if (config.showCloseButton)
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topLeft,
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: D3CameraControlButton(
+                    icon: Icons.close,
+                    onPressed: () => _close(context),
+                  ),
+                ),
+              ),
+            ),
+
+          // Controls float over the feed, anchored to the bottom of the
+          // screen -- a fixed position the user can rely on, rather than
+          // one that moves when the aspect ratio changes.
+          SafeArea(
             child: Align(
               alignment: Alignment.bottomCenter,
               child: Padding(
@@ -261,15 +290,14 @@ class _CameraScreenBody extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    SizedBox(
-                      height: 32,
-                      child:
-                          config.showZoomBar &&
-                              isReady &&
-                              (capability?.maxZoomRatio ?? 1) > 1
-                          ? D3ZoomLevelBar(controller: controller)
-                          : null,
-                    ),
+                    // No fixed height: the bar sizes to its own content.
+                    // Forcing it into a 32px box clipped the pill labels
+                    // vertically, since the pills' own padding plus text
+                    // exceeds that.
+                    if (config.showZoomBar &&
+                        isReady &&
+                        (capability?.maxZoomRatio ?? 1) > 1)
+                      D3ZoomLevelBar(controller: controller),
                     const SizedBox(height: 16),
                     D3ShutterButton(
                       onPressed: isReady ? () => _capture(context) : null,
