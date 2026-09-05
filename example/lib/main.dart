@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:d3_camera/d3_camera.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -35,7 +37,7 @@ class _CameraDemoScreenState extends State<_CameraDemoScreen> {
   late final CustomCameraController _controller;
   String? _setupError;
   bool _permissionDenied = false;
-  ImageCaptureResult? _lastCapture;
+  ImageCaptureResult? _reviewingCapture;
 
   @override
   void initState() {
@@ -67,7 +69,10 @@ class _CameraDemoScreenState extends State<_CameraDemoScreen> {
     try {
       final result = await _controller.captureImage();
       if (!mounted) return;
-      setState(() => _lastCapture = result);
+      // A real camera app's own post-capture review screen -- replaces
+      // the live camera view until the user dismisses it, rather than a
+      // small thumbnail easy to miss.
+      setState(() => _reviewingCapture = result);
     } on CustomCameraException catch (e) {
       _showError('Capture failed: ${e.message}');
     }
@@ -131,6 +136,13 @@ class _CameraDemoScreenState extends State<_CameraDemoScreen> {
       );
     }
 
+    if (_reviewingCapture case final capture?) {
+      return _CaptureReviewScreen(
+        capture: capture,
+        onDismiss: () => setState(() => _reviewingCapture = null),
+      );
+    }
+
     final state = _controller.value;
     final isReady = state.status == CameraStatus.ready;
 
@@ -169,11 +181,14 @@ class _CameraDemoScreenState extends State<_CameraDemoScreen> {
                   : null,
             ),
 
+          // Top bar: flash/switch controls and zoom, grouped together
+          // near the top out of the shutter's way -- matches where a
+          // typical camera app puts secondary controls, keeping the
+          // bottom bar for the one primary action (the shutter).
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
@@ -195,23 +210,72 @@ class _CameraDemoScreenState extends State<_CameraDemoScreen> {
                       ),
                     ],
                   ),
-                  if (isReady && (state.capability?.maxZoomRatio ?? 1) > 1)
-                    _ZoomSlider(controller: _controller),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _ShutterButton(
-                        onPressed: isReady ? _capture : null,
-                      ),
-                    ],
-                  ),
-                  if (_lastCapture case final capture?)
-                    Text(
-                      'Last capture: ${capture.width}x${capture.height} '
-                      '(${capture.capturedLensDirection.name}) '
-                      '@ ${capture.filePath}',
-                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                  if (isReady && (state.capability?.maxZoomRatio ?? 1) > 1) ...[
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.center,
+                      child: _ZoomLevelBar(controller: _controller),
                     ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+
+          // Bottom bar: the shutter alone, pinned to the bottom edge the
+          // way a phone's own camera app places it -- not vertically
+          // centered against the rest of the controls.
+          SafeArea(
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 24),
+                child: _ShutterButton(onPressed: isReady ? _capture : null),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Full-screen post-capture review -- the real capture-preview affordance
+/// requested in on-device feedback (a capture with a shutter sound but no
+/// visible result is a broken-feeling flow, not a minor polish item).
+class _CaptureReviewScreen extends StatelessWidget {
+  const _CaptureReviewScreen({required this.capture, required this.onDismiss});
+
+  final ImageCaptureResult capture;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Center(child: Image.file(File(capture.filePath))),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _ControlButton(icon: Icons.close, onPressed: onDismiss),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black45,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${capture.width}x${capture.height} '
+                      '(${capture.capturedLensDirection.name})',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -262,30 +326,87 @@ class _ShutterButton extends StatelessWidget {
   }
 }
 
-class _ZoomSlider extends StatelessWidget {
-  const _ZoomSlider({required this.controller});
+/// A row of discrete zoom-level pills (1x, 2x, ...) rather than a bare
+/// full-width Slider -- closer to how real camera apps present zoom, and
+/// more usable via touch than dragging a thin slider thumb. Levels are
+/// generated from the capability's own reported range rather than
+/// hardcoded, since that range varies per device.
+class _ZoomLevelBar extends StatelessWidget {
+  const _ZoomLevelBar({required this.controller});
 
   final CustomCameraController controller;
+
+  List<double> _levels(double min, double max) {
+    final candidates = <double>{min, 1.0, 2.0, 3.0, 5.0, max}
+        .where((level) => level >= min && level <= max)
+        .toList()
+      ..sort();
+    return candidates;
+  }
 
   @override
   Widget build(BuildContext context) {
     final capability = controller.capability;
-    return Row(
-      children: [
-        const Icon(Icons.zoom_out, color: Colors.white70, size: 18),
-        Expanded(
-          child: Slider(
-            value: controller.value.zoomRatio.clamp(
-              capability.minZoomRatio,
-              capability.maxZoomRatio,
+    final levels = _levels(capability.minZoomRatio, capability.maxZoomRatio);
+    final current = controller.value.zoomRatio;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.black45,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final level in levels)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: _ZoomPill(
+                label: level == level.roundToDouble()
+                    ? '${level.toInt()}x'
+                    : '${level.toStringAsFixed(1)}x',
+                selected: (current - level).abs() < 0.05,
+                onTap: () => controller.setZoom(level),
+              ),
             ),
-            min: capability.minZoomRatio,
-            max: capability.maxZoomRatio,
-            onChanged: (value) => controller.setZoom(value),
+        ],
+      ),
+    );
+  }
+}
+
+class _ZoomPill extends StatelessWidget {
+  const _ZoomPill({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.black : Colors.white,
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
           ),
         ),
-        const Icon(Icons.zoom_in, color: Colors.white70, size: 18),
-      ],
+      ),
     );
   }
 }

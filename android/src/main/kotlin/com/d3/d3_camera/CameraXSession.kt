@@ -1,6 +1,8 @@
 package com.d3.d3_camera
 
 import android.content.Context
+import android.hardware.display.DisplayManager
+import android.view.Surface
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
@@ -69,8 +71,18 @@ class CameraXSession(
 
         val selector = selectorFor(lensDirection)
 
-        val newPreview = Preview.Builder().build()
-        val newImageCapture = ImageCapture.Builder().build()
+        // Not tied to an Activity, so there is no windowManager.
+        // defaultDisplay the usual way -- read the real default display's
+        // current rotation via DisplayManager instead of leaving
+        // targetRotation unset. An unset targetRotation was confirmed on
+        // a Pixel 10 to produce a preview rotated 180 degrees from
+        // upright, not merely "close enough" -- CameraX needs to be told
+        // the actual display rotation explicitly for a session that
+        // isn't bound to an Activity's own view hierarchy.
+        val displayRotation = currentDisplayRotation()
+
+        val newPreview = Preview.Builder().setTargetRotation(displayRotation).build()
+        val newImageCapture = ImageCapture.Builder().setTargetRotation(displayRotation).build()
 
         // CameraX invokes the SurfaceProvider asynchronously, on its own
         // executor, some milliseconds after bindToLifecycle returns --
@@ -203,6 +215,20 @@ class CameraXSession(
     private suspend fun getOrCreateProvider(): ProcessCameraProvider {
         cameraProvider?.let { return it }
         return ProcessCameraProvider.getInstance(context).await()
+    }
+
+    /**
+     * The default display's current rotation, read via [DisplayManager]
+     * rather than an Activity's `windowManager.defaultDisplay` (not
+     * available here -- see the class doc on why this session is not
+     * Activity-bound). Falls back to [Surface.ROTATION_0] if no display
+     * can be found, which is the common case for a typical portrait-only
+     * phone anyway.
+     */
+    private fun currentDisplayRotation(): Int {
+        val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+        val display = displayManager?.getDisplay(android.view.Display.DEFAULT_DISPLAY)
+        return display?.rotation ?: Surface.ROTATION_0
     }
 }
 
