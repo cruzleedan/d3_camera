@@ -23,13 +23,10 @@ or any computer-vision inference.
 
 ## Architecture
 
-Full technical design — requirements, layering, coordinate-system design,
-platform boundary, API surface, and phased plan — is written up before any
-implementation:
-
-*(link the published design doc here once available)*
-
-In short:
+The full technical design (requirements, layering, coordinate-system
+design, platform boundary, API surface, and phased plan) was written up
+before any implementation began. It lives outside this repo, alongside the
+rest of this codebase's private planning docs. In short:
 
 - **Dart owns almost everything** — the camera state machine, the entire
   annotation system (model, hit-testing, rendering, undo/redo,
