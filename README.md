@@ -1,14 +1,18 @@
 # d3_camera
 
-A customizable Flutter camera + image annotation package. Live preview,
-still capture, flash/zoom/focus/exposure control, and on-image annotation
-(shapes, arrows, freehand, text) as reusable Dart primitives — no
-predefined camera screen. CameraX-backed on Android; the Dart API is
-structured so an iOS implementation can be added later without changes to
-consuming code.
+A customizable Flutter camera package. Live preview, still capture, and
+flash/zoom/focus/exposure control, offered as a turnkey screen, a
+lifecycle helper, or bare primitives — use whichever layer fits.
+CameraX-backed on Android; the Dart API is structured so an iOS
+implementation can be added later without changes to consuming code.
 
-**Status:** early scaffold. No functional camera or annotation code yet —
-see [Development phases](#development-phases) below.
+**Annotation lives in [d3_image_annotator](https://github.com/cruzleedan/d3_image_annotator).**
+It started here but was split out: annotating an image has nothing to do
+with cameras, and it is wanted for photos that already exist. Compose the
+two to capture-then-annotate — this package has no dependency on it.
+
+**Status:** camera functionality complete (phases 1–2), verified on a
+physical device. See [Development phases](#development-phases) below.
 
 ## Why this exists
 
@@ -45,11 +49,10 @@ rest of this codebase's private planning docs. In short:
    machine
 2. Preview and controls — Texture preview, capture, flash/zoom/focus/
    exposure, capability detection
-3. Annotation system — model, controller, overlay widget, undo/redo
-4. Image transformation / export — coordinate transforms, export pipeline,
-   crop
-5. Performance optimization
-6. Testing / device compatibility
+3. ~~Annotation system~~ — moved to
+   [d3_image_annotator](https://github.com/cruzleedan/d3_image_annotator)
+4. Performance optimization
+5. Testing / device compatibility
 
 ## Getting started
 

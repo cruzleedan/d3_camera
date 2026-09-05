@@ -2,9 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import '../annotations/annotation_controller.dart';
-import '../annotations/annotation_overlay_widget.dart';
-import '../annotations/annotation_tool.dart';
 import '../camera/capture_result.dart';
 
 /// Full-screen post-capture review: shows what was just captured until
@@ -22,8 +19,6 @@ class D3CaptureReviewScreen extends StatelessWidget {
     required this.onDismiss,
     this.onAccept,
     this.showMetadata = false,
-    this.annotationController,
-    this.annotationTool = AnnotationTool.rectangle,
   });
 
   final ImageCaptureResult capture;
@@ -33,20 +28,6 @@ class D3CaptureReviewScreen extends StatelessWidget {
   /// Shows the capture's pixel dimensions and lens. Off by default --
   /// it's a debugging aid, not something an end user needs.
   final bool showMetadata;
-
-  /// When supplied, an [AnnotationOverlay] is laid over the photo and
-  /// the user can mark it up. Null (the default) leaves this a plain
-  /// review screen.
-  ///
-  /// The overlay shares the photo's own box -- sized to the image's
-  /// real pixel dimensions -- so both resolve the same content rect and
-  /// a mark lands where it was drawn.
-  final AnnotationController? annotationController;
-
-  /// Which tool the overlay's next drag uses. Owned by the caller,
-  /// since a tool picker is UI this screen deliberately does not
-  /// dictate.
-  final AnnotationTool annotationTool;
 
   @override
   Widget build(BuildContext context) {
@@ -85,24 +66,9 @@ class D3CaptureReviewScreen extends StatelessWidget {
                   child: SizedBox(
                     width: capture.width.toDouble(),
                     height: capture.height.toDouble(),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        Image.file(File(capture.filePath), fit: BoxFit.contain),
-                        // The box is the image's own pixel size, so the
-                        // overlay's imageSize and its bounds are the
-                        // same rect by construction -- they cannot
-                        // disagree about where content sits.
-                        if (annotationController case final controller?)
-                          AnnotationOverlay(
-                            controller: controller,
-                            imageSize: Size(
-                              capture.width.toDouble(),
-                              capture.height.toDouble(),
-                            ),
-                            tool: annotationTool,
-                          ),
-                      ],
+                    child: Image.file(
+                      File(capture.filePath),
+                      fit: BoxFit.contain,
                     ),
                   ),
                 ),

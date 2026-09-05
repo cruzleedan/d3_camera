@@ -39,21 +39,8 @@ export 'src/ui/camera_screen.dart';
 export 'src/ui/capture_review_screen.dart';
 export 'src/ui/zoom_level_bar.dart';
 
-// Annotations. Geometry is always normalized [0,1] image space (see
-// Coordinates below) so a mark drawn on a preview lands in the same
-// place on a full-resolution export.
-export 'src/annotations/annotation.dart';
-export 'src/annotations/annotation_controller.dart';
-export 'src/annotations/annotation_overlay_widget.dart';
-export 'src/annotations/annotation_painter.dart';
-export 'src/annotations/annotation_style.dart';
-export 'src/annotations/annotation_tool.dart';
-export 'src/annotations/hit_testing.dart';
-
 // Coordinates
-export 'src/coordinates/coordinate_space.dart';
 export 'src/coordinates/normalized_point.dart';
-export 'src/coordinates/normalized_rect.dart';
 
 // Platform (exported so a consumer can supply a fake CameraPlatform in
 // their own widget tests, same pattern this package's own tests use)

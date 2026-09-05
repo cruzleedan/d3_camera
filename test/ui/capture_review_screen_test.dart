@@ -20,16 +20,9 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    final controller = AnnotationController();
-    addTearDown(controller.dispose);
-
     await tester.pumpWidget(
       MaterialApp(
-        home: D3CaptureReviewScreen(
-          capture: capture,
-          onDismiss: () {},
-          annotationController: controller,
-        ),
+        home: D3CaptureReviewScreen(capture: capture, onDismiss: () {}),
       ),
     );
     await tester.pump();
@@ -37,7 +30,7 @@ void main() {
     // getSize would report the SizedBox's *logical* 3000x4000, before
     // FittedBox scales it. What matters is the size actually painted on
     // screen, so measure the global rect instead.
-    return tester.getRect(find.byType(AnnotationOverlay)).size;
+    return tester.getRect(find.byType(Image)).size;
   }
 
   testWidgets('a portrait photo fills the height in a portrait window', (
