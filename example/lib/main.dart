@@ -146,53 +146,90 @@ class _CameraDemoScreenState extends State<_CameraDemoScreen> {
     final state = _controller.value;
     final isReady = state.status == CameraStatus.ready;
 
+    // Native Pixel/iOS camera apps don't run the feed full-bleed behind
+    // floating controls -- the feed occupies a fixed rectangular area
+    // (its own aspect ratio, letterboxed against the rest of the
+    // screen), and shutter/zoom/flash/switch live below it in their own
+    // dedicated space, never overlapping the image. previewSize's own
+    // aspect ratio drives the box below rather than a hardcoded 4:3,
+    // since it already reflects whatever CameraX actually negotiated
+    // (see CameraXSession's AspectRatioStrategy, which keeps Preview and
+    // ImageCapture on the same ratio).
+    final previewAspectRatio = state.previewSize == null
+        ? 3 / 4
+        : state.previewSize!.width / state.previewSize!.height;
+
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          CustomCameraPreview(controller: _controller),
-
-          if (!isReady && state.status != CameraStatus.capturing)
-            ColoredBox(
-              color: Colors.black,
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
               child: Center(
-                child: Text(
-                  _setupError ?? state.lastError?.message ?? state.status.name,
-                  style: const TextStyle(color: Colors.white),
-                  textAlign: TextAlign.center,
+                child: AspectRatio(
+                  aspectRatio: previewAspectRatio,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CustomCameraPreview(controller: _controller),
+
+                      if (!isReady && state.status != CameraStatus.capturing)
+                        ColoredBox(
+                          color: Colors.black,
+                          child: Center(
+                            child: Text(
+                              _setupError ??
+                                  state.lastError?.message ??
+                                  state.status.name,
+                              style: const TextStyle(color: Colors.white),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+
+                      if (state.capability?.supportsTapToFocus ?? false)
+                        GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTapUp: isReady
+                              ? (details) {
+                                  final box =
+                                      context.findRenderObject() as RenderBox;
+                                  final local = box.globalToLocal(
+                                    details.globalPosition,
+                                  );
+                                  final point = NormalizedPoint(
+                                    (local.dx / box.size.width).clamp(0.0, 1.0),
+                                    (local.dy / box.size.height).clamp(0.0, 1.0),
+                                  );
+                                  _setMeteringPoint(point);
+                                }
+                              : null,
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
 
-          if (state.capability?.supportsTapToFocus ?? false)
-            GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTapUp: isReady
-                  ? (details) {
-                      final box = context.findRenderObject() as RenderBox;
-                      final local = box.globalToLocal(details.globalPosition);
-                      final point = NormalizedPoint(
-                        (local.dx / box.size.width).clamp(0.0, 1.0),
-                        (local.dy / box.size.height).clamp(0.0, 1.0),
-                      );
-                      _setMeteringPoint(point);
-                    }
-                  : null,
-            ),
-
-          // Top bar: flash/switch controls and zoom, grouped together
-          // near the top out of the shutter's way -- matches where a
-          // typical camera app puts secondary controls, keeping the
-          // bottom bar for the one primary action (the shutter).
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            // Control panel, entirely below the feed rect -- zoom
+            // directly above the shutter, flash/switch directly below
+            // it, matching where Pixel Camera and iOS Camera place them.
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
                 children: [
+                  SizedBox(
+                    height: 32,
+                    child: isReady && (state.capability?.maxZoomRatio ?? 1) > 1
+                        ? _ZoomLevelBar(controller: _controller)
+                        : null,
+                  ),
+                  const SizedBox(height: 16),
+                  _ShutterButton(onPressed: isReady ? _capture : null),
+                  const SizedBox(height: 16),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       _ControlButton(
                         icon: switch (state.flashMode) {
@@ -200,45 +237,23 @@ class _CameraDemoScreenState extends State<_CameraDemoScreen> {
                           FlashMode.on => Icons.flash_on,
                           FlashMode.auto => Icons.flash_auto,
                         },
-                        onPressed: (isReady && (state.capability?.hasFlash ?? false))
+                        onPressed:
+                            (isReady && (state.capability?.hasFlash ?? false))
                             ? _toggleFlash
                             : null,
                       ),
+                      const SizedBox(width: 48),
                       _ControlButton(
                         icon: Icons.cameraswitch,
                         onPressed: isReady ? _switchCamera : null,
                       ),
                     ],
                   ),
-                  if (isReady && (state.capability?.maxZoomRatio ?? 1) > 1) ...[
-                    const SizedBox(height: 12),
-                    Align(
-                      alignment: Alignment.center,
-                      child: _ZoomLevelBar(controller: _controller),
-                    ),
-                  ],
                 ],
               ),
             ),
-          ),
-
-          // Bottom bar: the shutter alone. Native Pixel/iOS camera apps
-          // keep the shutter noticeably clear of the very bottom edge
-          // (well past the safe-area inset alone), not flush against
-          // it -- an earlier pass overcorrected in the opposite
-          // direction from the original "too high" complaint. SafeArea
-          // still guards against a gesture-nav bar; the extra padding on
-          // top of it is what gives real breathing room.
-          SafeArea(
-            child: Align(
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 48),
-                child: _ShutterButton(onPressed: isReady ? _capture : null),
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

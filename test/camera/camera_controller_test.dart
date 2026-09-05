@@ -4,6 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'fake_camera_platform.dart';
 
 void main() {
+  // CustomCameraController.initialize()/dispose() call
+  // SystemChrome.setPreferredOrientations to lock/restore portrait
+  // orientation for the camera session -- that's a real platform-channel
+  // call, which requires a binding to exist even though flutter_test
+  // mocks the channel response. Plain `test()` (as opposed to
+  // `testWidgets()`) doesn't initialize one on its own.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('CustomCameraController.initialize', () {
     test('transitions uninitialized -> initializing -> ready', () async {
       final platform = FakeCameraPlatform();

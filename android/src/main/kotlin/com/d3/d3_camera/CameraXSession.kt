@@ -10,6 +10,8 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.MeteringPointFactory
 import androidx.camera.core.Preview
 import androidx.camera.core.SurfaceOrientedMeteringPointFactory
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -44,6 +46,7 @@ class CameraXSession(
     private var imageCapture: ImageCapture? = null
     private var surfaceProducer: TextureRegistry.SurfaceProducer? = null
     private var boundLensDirection: LensDirection? = null
+    private var boundSensorOrientationDegrees: Int = 0
     private val lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get()
 
     /** Result of a successful [bind]: the bound camera, its preview's resolution, and sensor orientation. */
@@ -87,8 +90,27 @@ class CameraXSession(
         // in CustomCameraPreview, via a RotatedBox. That's why this
         // method reports sensorOrientationDegrees in its result instead
         // of trying to solve rotation natively.
-        val newPreview = Preview.Builder().build()
-        val newImageCapture = ImageCapture.Builder().build()
+        // Preview and ImageCapture are given the same AspectRatioStrategy
+        // so both use cases crop to the same aspect ratio of the sensor's
+        // active array -- without this, CameraX selects each use case's
+        // resolution independently, and the captured photo's aspect
+        // ratio can differ from what was actually framed in the live
+        // preview (confirmed as a real, user-visible mismatch). 4:3 is
+        // used as the fallback-safe default: CameraX's own
+        // ResolutionSelector defaults to it when unset, and it's the
+        // aspect ratio most consistently supported across Android camera
+        // hardware -- see the design doc's own device-compatibility
+        // section on detecting rather than assuming, which applies here:
+        // FALLBACK_AUTO_STRATEGY still lets CameraX pick a close match on
+        // hardware that can't produce an exact 4:3 stream.
+        val resolutionSelector =
+            ResolutionSelector.Builder()
+                .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                .build()
+
+        val newPreview = Preview.Builder().setResolutionSelector(resolutionSelector).build()
+        val newImageCapture =
+            ImageCapture.Builder().setResolutionSelector(resolutionSelector).build()
 
         // CameraX invokes the SurfaceProvider asynchronously, on its own
         // executor, some milliseconds after bindToLifecycle returns --
@@ -119,6 +141,7 @@ class CameraXSession(
                 preview = newPreview
                 imageCapture = newImageCapture
                 boundLensDirection = lensDirection
+                boundSensorOrientationDegrees = sensorOrientationDegrees(boundCamera.cameraInfo)
             }
 
         return BoundSession(
@@ -126,7 +149,7 @@ class CameraXSession(
             textureId = producer.id(),
             previewWidth = resolution.width,
             previewHeight = resolution.height,
-            sensorOrientationDegrees = sensorOrientationDegrees(camera!!.cameraInfo),
+            sensorOrientationDegrees = boundSensorOrientationDegrees,
         )
     }
 
@@ -167,7 +190,12 @@ class CameraXSession(
             imageCapture ?: throw IllegalStateException("No camera session is bound.")
         val lens =
             boundLensDirection ?: throw IllegalStateException("No camera session is bound.")
-        return ImageCaptureHandler.capture(capture, cacheDir, lens)
+        return ImageCaptureHandler.capture(
+            capture,
+            cacheDir,
+            lens,
+            boundSensorOrientationDegrees,
+        )
     }
 
     fun setFlashMode(mode: Int) {

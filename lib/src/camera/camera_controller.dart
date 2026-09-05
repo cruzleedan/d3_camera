@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show DeviceOrientation, SystemChrome;
 
 import '../coordinates/normalized_point.dart';
 import '../errors/camera_exceptions.dart';
@@ -87,6 +88,21 @@ class CustomCameraController extends ChangeNotifier
     _requireStatus(CameraStatus.uninitialized, 'initialize');
 
     _setValue(_value.copyWith(status: CameraStatus.initializing));
+
+    // Locks the UI to portrait for the lifetime of the camera session,
+    // matching every native camera app (Pixel Camera, iOS Camera): the
+    // screen itself never reflows to landscape when the device rotates,
+    // only individual control icons do (a further refinement not yet
+    // implemented here). This is a controller-lifecycle concern, not
+    // something left to the consuming app to remember on every screen
+    // that hosts a camera — a real consuming app may support landscape
+    // elsewhere in its own UI, and this lock is scoped to exactly the
+    // lifetime of this controller's session, restored in full on
+    // dispose(). It also happens to make the rotation-correction math
+    // in `CustomCameraPreview` sound: that correction currently assumes
+    // a fixed portraitUp device orientation, which this lock guarantees
+    // is actually true rather than merely assumed.
+    await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
     try {
       final info = await _platform.initialize(
@@ -257,6 +273,12 @@ class CustomCameraController extends ChangeNotifier
     if (hadSession) {
       await _platform.dispose();
       _platform.setEventListener(null);
+      // Restores all four orientations -- undoes the portrait lock
+      // applied in initialize(). Only done when a session actually
+      // existed (hadSession), so a dispose() from CameraStatus.
+      // uninitialized (a documented no-op, see this method's own docs)
+      // never touches orientation preferences it never changed.
+      await SystemChrome.setPreferredOrientations([]);
     }
 
     _setValue(_value.copyWith(status: CameraStatus.disposed, clearTextureId: true));
