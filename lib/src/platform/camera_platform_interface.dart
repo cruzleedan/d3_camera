@@ -34,11 +34,20 @@ class CameraSessionInfo {
     required this.capability,
     required this.textureId,
     required this.previewSize,
+    required this.sensorOrientationDegrees,
   });
 
   final CameraCapability capability;
   final int textureId;
   final Size previewSize;
+
+  /// `CameraCharacteristics.SENSOR_ORIENTATION` for the bound lens.
+  /// `CustomCameraPreview` uses this (plus the current device orientation)
+  /// to correct the Texture's rotation on the Dart side — Flutter's
+  /// SurfaceProducer texture path does not apply this correction itself
+  /// on API 29+. See `CameraSessionInfo`'s Pigeon-side counterpart for
+  /// the full explanation.
+  final int sensorOrientationDegrees;
 }
 
 /// Abstract contract between `CustomCameraController` and whatever

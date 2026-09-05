@@ -106,4 +106,65 @@ void main() {
       );
     });
   });
+
+  group('computeRotationQuarterTurns', () {
+    test(
+      'back camera, sensor 90 degrees, portrait-up device: one quarter turn',
+      () {
+        // The exact case confirmed on a physical device (Pixel 10, rear
+        // camera, SENSOR_ORIENTATION=90) where omitting this correction
+        // produced a preview visibly rotated 90 degrees from upright.
+        final turns = computeRotationQuarterTurns(
+          sensorOrientationDegrees: 90,
+          deviceOrientationDegrees: 0,
+          sign: -1,
+        );
+        expect(turns, 1);
+      },
+    );
+
+    test(
+      'front camera, sensor 270 degrees, portrait-up device: three quarter turns',
+      () {
+        // SENSOR_ORIENTATION=270 for the front lens was confirmed via
+        // dumpsys media.camera on the same physical device as the back-
+        // camera case above, but -- unlike that case -- the resulting
+        // *visual* correctness of this specific quarterTurns value has
+        // not itself been independently confirmed on-device (only the
+        // back camera's rotation bug was actually observed and fixed).
+        // This test locks in the formula's output for this input; if
+        // front-camera preview is later found visually wrong, revisit
+        // the `sign` convention here first, per this function's own docs
+        // on why front/back use opposite signs.
+        final turns = computeRotationQuarterTurns(
+          sensorOrientationDegrees: 270,
+          deviceOrientationDegrees: 0,
+          sign: 1,
+        );
+        expect(turns, 3);
+      },
+    );
+
+    test('sensor orientation 0 degrees needs no correction', () {
+      final turns = computeRotationQuarterTurns(
+        sensorOrientationDegrees: 0,
+        deviceOrientationDegrees: 0,
+        sign: -1,
+      );
+      expect(turns, 0);
+    });
+
+    test('result is always in range 0..3', () {
+      for (final sensorDegrees in [0, 90, 180, 270]) {
+        for (final sign in [-1, 1]) {
+          final turns = computeRotationQuarterTurns(
+            sensorOrientationDegrees: sensorDegrees,
+            deviceOrientationDegrees: 0,
+            sign: sign,
+          );
+          expect(turns, inInclusiveRange(0, 3));
+        }
+      }
+    });
+  });
 }

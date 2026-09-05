@@ -55,3 +55,31 @@ Rect computePreviewContentRect({
 
   return Rect.fromLTWH(left, top, scaledWidth, scaledHeight);
 }
+
+/// How many clockwise quarter-turns a `RotatedBox` needs to correct a
+/// camera Texture's rotation, given the sensor's physical mounting angle
+/// and the current device orientation.
+///
+/// Required because Flutter's `Texture`/`SurfaceProducer` rendering path
+/// does not apply the sensor's rotation metadata itself on API 29+
+/// devices (`TextureRegistry.SurfaceProducer.handlesCropAndRotation()`
+/// reports `false` on that path) -- confirmed on a physical device, where
+/// omitting this correction left the preview rotated 90 degrees from
+/// upright. Mirrors the formula Flutter's own official
+/// `camera_android_camerax` plugin uses after hitting the identical bug
+/// (flutter/packages#8629): `(sensorOrientationDegrees -
+/// deviceOrientationDegrees * sign + 360) % 360`, floor-divided into
+/// quarter turns.
+///
+/// [sign] is `-1` for the back camera and `1` for the front camera -- the
+/// front sensor is mounted mirrored relative to the back, which flips
+/// the sign of the correction needed.
+int computeRotationQuarterTurns({
+  required int sensorOrientationDegrees,
+  required int deviceOrientationDegrees,
+  required int sign,
+}) {
+  final rotationDegrees =
+      (sensorOrientationDegrees - deviceOrientationDegrees * sign + 360) % 360;
+  return rotationDegrees ~/ 90;
+}

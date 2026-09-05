@@ -45,6 +45,7 @@ class MethodChannelCameraPlatform extends pigeon.CameraFlutterApi
       result.textureId,
       result.previewWidth,
       result.previewHeight,
+      result.sensorOrientationDegrees,
     );
   });
 
@@ -80,6 +81,7 @@ class MethodChannelCameraPlatform extends pigeon.CameraFlutterApi
           result.textureId,
           result.previewWidth,
           result.previewHeight,
+          result.sensorOrientationDegrees,
         );
       });
 
@@ -198,11 +200,13 @@ CameraSessionInfo _fromPigeonSessionInfo(
   int textureId,
   int previewWidth,
   int previewHeight,
+  int sensorOrientationDegrees,
 ) {
   return CameraSessionInfo(
     capability: _fromPigeonCapability(capability),
     textureId: textureId,
     previewSize: Size(previewWidth.toDouble(), previewHeight.toDouble()),
+    sensorOrientationDegrees: sensorOrientationDegrees,
   );
 }
 

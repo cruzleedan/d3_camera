@@ -1,8 +1,7 @@
 package com.d3.d3_camera
 
 import android.content.Context
-import android.hardware.display.DisplayManager
-import android.view.Surface
+import androidx.camera.core.CameraControl
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
@@ -47,12 +46,13 @@ class CameraXSession(
     private var boundLensDirection: LensDirection? = null
     private val lifecycleOwner: LifecycleOwner = ProcessLifecycleOwner.get()
 
-    /** Result of a successful [bind] or [switchTo]: the bound camera and its preview's resolution. */
+    /** Result of a successful [bind]: the bound camera, its preview's resolution, and sensor orientation. */
     data class BoundSession(
         val cameraInfo: CameraInfo,
         val textureId: Long,
         val previewWidth: Int,
         val previewHeight: Int,
+        val sensorOrientationDegrees: Int,
     )
 
     /**
@@ -71,18 +71,24 @@ class CameraXSession(
 
         val selector = selectorFor(lensDirection)
 
-        // Not tied to an Activity, so there is no windowManager.
-        // defaultDisplay the usual way -- read the real default display's
-        // current rotation via DisplayManager instead of leaving
-        // targetRotation unset. An unset targetRotation was confirmed on
-        // a Pixel 10 to produce a preview rotated 180 degrees from
-        // upright, not merely "close enough" -- CameraX needs to be told
-        // the actual display rotation explicitly for a session that
-        // isn't bound to an Activity's own view hierarchy.
-        val displayRotation = currentDisplayRotation()
-
-        val newPreview = Preview.Builder().setTargetRotation(displayRotation).build()
-        val newImageCapture = ImageCapture.Builder().setTargetRotation(displayRotation).build()
+        // targetRotation deliberately left at CameraX's own default
+        // (effectively ROTATION_0) rather than guessed from
+        // DisplayManager, which this non-Activity-bound session has no
+        // reliable reading for anyway. This is not where rotation
+        // correctness comes from: on API 29+, Flutter's ImageReader-
+        // backed SurfaceProducer texture path does not automatically
+        // apply rotation/crop metadata regardless of what targetRotation
+        // says (see TextureRegistry.SurfaceProducer#handlesCropAndRotation
+        // and flutter/flutter#154241 -- confirmed on-device: a native-
+        // side targetRotation fix alone did not resolve a real 90-degree
+        // rotation). The actual fix mirrors Flutter's own official
+        // camera_android_camerax plugin (flutter/packages#8629): correct
+        // for CameraCharacteristics.SENSOR_ORIENTATION on the Dart side,
+        // in CustomCameraPreview, via a RotatedBox. That's why this
+        // method reports sensorOrientationDegrees in its result instead
+        // of trying to solve rotation natively.
+        val newPreview = Preview.Builder().build()
+        val newImageCapture = ImageCapture.Builder().build()
 
         // CameraX invokes the SurfaceProvider asynchronously, on its own
         // executor, some milliseconds after bindToLifecycle returns --
@@ -120,7 +126,16 @@ class CameraXSession(
             textureId = producer.id(),
             previewWidth = resolution.width,
             previewHeight = resolution.height,
+            sensorOrientationDegrees = sensorOrientationDegrees(camera!!.cameraInfo),
         )
+    }
+
+    private fun sensorOrientationDegrees(cameraInfo: CameraInfo): Int {
+        val characteristic =
+            androidx.camera.camera2.interop.Camera2CameraInfo
+                .from(cameraInfo)
+                .getCameraCharacteristic(android.hardware.camera2.CameraCharacteristics.SENSOR_ORIENTATION)
+        return characteristic ?: 0
     }
 
     /** Unbinds all use cases and releases the Flutter texture. Safe to call even if never bound. */
@@ -170,6 +185,20 @@ class CameraXSession(
      * cancels an in-flight call when a second one starts on the same
      * camera, so separate AF-only and AE-only calls for the same tap
      * reliably race each other and surface as a cancellation exception.
+     *
+     * A second, *legitimate* source of cancellation remains even with a
+     * single combined call: the user tapping a new point (or the same
+     * point twice in quick succession) before the previous
+     * `startFocusAndMetering` finishes. CameraX cancels the older call in
+     * that case and completes its future exceptionally with
+     * [CameraControl.OperationCanceledException] -- confirmed on-device
+     * as the exact cause of a real crash report ("Cancelled by another
+     * startFocusAndMetering()"). This is normal, expected behavior for a
+     * tap-to-focus gesture (the newer tap simply supersedes the older
+     * one), not a failure, so it is caught here and swallowed rather than
+     * propagated as an error that would otherwise push the whole
+     * controller into its error state over what the user experiences as
+     * "I tapped focus twice."
      */
     suspend fun setMeteringPoint(x: Float, y: Float): FocusMeteringResult? {
         val cameraControl = camera?.cameraControl ?: return null
@@ -178,7 +207,11 @@ class CameraXSession(
         val action =
             FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE)
                 .build()
-        return cameraControl.startFocusAndMetering(action).await()
+        return try {
+            cameraControl.startFocusAndMetering(action).await()
+        } catch (e: CameraControl.OperationCanceledException) {
+            null
+        }
     }
 
     fun resumeContinuousFocus() {
@@ -217,18 +250,5 @@ class CameraXSession(
         return ProcessCameraProvider.getInstance(context).await()
     }
 
-    /**
-     * The default display's current rotation, read via [DisplayManager]
-     * rather than an Activity's `windowManager.defaultDisplay` (not
-     * available here -- see the class doc on why this session is not
-     * Activity-bound). Falls back to [Surface.ROTATION_0] if no display
-     * can be found, which is the common case for a typical portrait-only
-     * phone anyway.
-     */
-    private fun currentDisplayRotation(): Int {
-        val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
-        val display = displayManager?.getDisplay(android.view.Display.DEFAULT_DISPLAY)
-        return display?.rotation ?: Surface.ROTATION_0
-    }
 }
 

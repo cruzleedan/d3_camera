@@ -99,6 +99,7 @@ class CustomCameraController extends ChangeNotifier
           capability: info.capability,
           textureId: info.textureId,
           previewSize: info.previewSize,
+          sensorOrientationDegrees: info.sensorOrientationDegrees,
         ),
       );
     } on CustomCameraException catch (e) {
@@ -175,6 +176,7 @@ class CustomCameraController extends ChangeNotifier
           capability: info.capability,
           textureId: info.textureId,
           previewSize: info.previewSize,
+          sensorOrientationDegrees: info.sensorOrientationDegrees,
         ),
       );
     } on CustomCameraException catch (e) {

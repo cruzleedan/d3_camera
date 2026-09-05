@@ -19,6 +19,7 @@ class FakeCameraPlatform implements CameraPlatform {
     ),
     this.textureIdToReturn = 1,
     this.previewSizeToReturn = const Size(1920, 1080),
+    this.sensorOrientationDegreesToReturn = 90,
     this.initializeError,
     this.captureResultToReturn = const ImageCaptureResult(
       filePath: '/fake/capture.jpg',
@@ -37,6 +38,7 @@ class FakeCameraPlatform implements CameraPlatform {
   CameraCapability capabilityToReturn;
   int textureIdToReturn;
   Size previewSizeToReturn;
+  int sensorOrientationDegreesToReturn;
 
   /// When set, [initialize] throws this instead of succeeding.
   CustomCameraException? initializeError;
@@ -92,6 +94,7 @@ class FakeCameraPlatform implements CameraPlatform {
       capability: capabilityToReturn,
       textureId: textureIdToReturn,
       previewSize: previewSizeToReturn,
+      sensorOrientationDegrees: sensorOrientationDegreesToReturn,
     );
   }
 
@@ -127,6 +130,7 @@ class FakeCameraPlatform implements CameraPlatform {
       capability: capabilityToReturn,
       textureId: textureIdToReturn,
       previewSize: previewSizeToReturn,
+      sensorOrientationDegrees: sensorOrientationDegreesToReturn,
     );
   }
 

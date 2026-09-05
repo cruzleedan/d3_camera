@@ -222,14 +222,18 @@ class _CameraDemoScreenState extends State<_CameraDemoScreen> {
             ),
           ),
 
-          // Bottom bar: the shutter alone, pinned to the bottom edge the
-          // way a phone's own camera app places it -- not vertically
-          // centered against the rest of the controls.
+          // Bottom bar: the shutter alone. Native Pixel/iOS camera apps
+          // keep the shutter noticeably clear of the very bottom edge
+          // (well past the safe-area inset alone), not flush against
+          // it -- an earlier pass overcorrected in the opposite
+          // direction from the original "too high" complaint. SafeArea
+          // still guards against a gesture-nav bar; the extra padding on
+          // top of it is what gives real breathing room.
           SafeArea(
             child: Align(
               alignment: Alignment.bottomCenter,
               child: Padding(
-                padding: const EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsets.only(bottom: 48),
                 child: _ShutterButton(onPressed: isReady ? _capture : null),
               ),
             ),

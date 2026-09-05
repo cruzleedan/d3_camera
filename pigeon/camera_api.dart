@@ -70,6 +70,7 @@ class InitializeResult {
     required this.textureId,
     required this.previewWidth,
     required this.previewHeight,
+    required this.sensorOrientationDegrees,
   });
 
   final CameraCapabilityData capability;
@@ -81,25 +82,39 @@ class InitializeResult {
   /// ratio rather than assuming one.
   final int previewWidth;
   final int previewHeight;
+
+  /// CameraCharacteristics.SENSOR_ORIENTATION for the bound lens, in
+  /// degrees. Flutter's Texture/SurfaceProducer path does NOT
+  /// automatically correct for this on API 29+ (the ImageReader-backed
+  /// rendering path, used on nearly all current devices, explicitly does
+  /// not handle rotation metadata -- see
+  /// TextureRegistry.SurfaceProducer#handlesCropAndRotation). Rotation
+  /// correction is applied in Dart, in CustomCameraPreview, using this
+  /// value -- mirroring the same fix Flutter's own official
+  /// camera_android_camerax plugin applies (flutter/packages#8629)
+  /// after hitting the identical bug.
+  final int sensorOrientationDegrees;
 }
 
 /// Result of [CameraHostApi.switchCamera]: mirrors [InitializeResult]
 /// since switching cameras rebinds the whole CameraX use-case group,
 /// including Preview -- the texture id (and possibly the preview
-/// resolution) may change and capability must be re-read for the newly
-/// bound lens.
+/// resolution/sensor orientation) may change and capability must be
+/// re-read for the newly bound lens.
 class SwitchCameraResult {
   const SwitchCameraResult({
     required this.capability,
     required this.textureId,
     required this.previewWidth,
     required this.previewHeight,
+    required this.sensorOrientationDegrees,
   });
 
   final CameraCapabilityData capability;
   final int textureId;
   final int previewWidth;
   final int previewHeight;
+  final int sensorOrientationDegrees;
 }
 
 /// Flash behavior for still capture. Auto and on are only meaningful on

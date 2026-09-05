@@ -228,6 +228,7 @@ class InitializeResult {
     required this.textureId,
     required this.previewWidth,
     required this.previewHeight,
+    required this.sensorOrientationDegrees,
   });
 
   CameraCapabilityData capability;
@@ -242,12 +243,25 @@ class InitializeResult {
 
   int previewHeight;
 
+  /// CameraCharacteristics.SENSOR_ORIENTATION for the bound lens, in
+  /// degrees. Flutter's Texture/SurfaceProducer path does NOT
+  /// automatically correct for this on API 29+ (the ImageReader-backed
+  /// rendering path, used on nearly all current devices, explicitly does
+  /// not handle rotation metadata -- see
+  /// TextureRegistry.SurfaceProducer#handlesCropAndRotation). Rotation
+  /// correction is applied in Dart, in CustomCameraPreview, using this
+  /// value -- mirroring the same fix Flutter's own official
+  /// camera_android_camerax plugin applies (flutter/packages#8629)
+  /// after hitting the identical bug.
+  int sensorOrientationDegrees;
+
   List<Object?> _toList() {
     return <Object?>[
       capability,
       textureId,
       previewWidth,
       previewHeight,
+      sensorOrientationDegrees,
     ];
   }
 
@@ -261,6 +275,7 @@ class InitializeResult {
       textureId: result[1]! as int,
       previewWidth: result[2]! as int,
       previewHeight: result[3]! as int,
+      sensorOrientationDegrees: result[4]! as int,
     );
   }
 
@@ -273,7 +288,7 @@ class InitializeResult {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(capability, other.capability) && _deepEquals(textureId, other.textureId) && _deepEquals(previewWidth, other.previewWidth) && _deepEquals(previewHeight, other.previewHeight);
+    return _deepEquals(capability, other.capability) && _deepEquals(textureId, other.textureId) && _deepEquals(previewWidth, other.previewWidth) && _deepEquals(previewHeight, other.previewHeight) && _deepEquals(sensorOrientationDegrees, other.sensorOrientationDegrees);
   }
 
   @override
@@ -282,21 +297,22 @@ class InitializeResult {
 
   @override
   String toString() {
-    return 'InitializeResult(capability: $capability, textureId: $textureId, previewWidth: $previewWidth, previewHeight: $previewHeight)';
+    return 'InitializeResult(capability: $capability, textureId: $textureId, previewWidth: $previewWidth, previewHeight: $previewHeight, sensorOrientationDegrees: $sensorOrientationDegrees)';
   }
 }
 
 /// Result of [CameraHostApi.switchCamera]: mirrors [InitializeResult]
 /// since switching cameras rebinds the whole CameraX use-case group,
 /// including Preview -- the texture id (and possibly the preview
-/// resolution) may change and capability must be re-read for the newly
-/// bound lens.
+/// resolution/sensor orientation) may change and capability must be
+/// re-read for the newly bound lens.
 class SwitchCameraResult {
   SwitchCameraResult({
     required this.capability,
     required this.textureId,
     required this.previewWidth,
     required this.previewHeight,
+    required this.sensorOrientationDegrees,
   });
 
   CameraCapabilityData capability;
@@ -307,12 +323,15 @@ class SwitchCameraResult {
 
   int previewHeight;
 
+  int sensorOrientationDegrees;
+
   List<Object?> _toList() {
     return <Object?>[
       capability,
       textureId,
       previewWidth,
       previewHeight,
+      sensorOrientationDegrees,
     ];
   }
 
@@ -326,6 +345,7 @@ class SwitchCameraResult {
       textureId: result[1]! as int,
       previewWidth: result[2]! as int,
       previewHeight: result[3]! as int,
+      sensorOrientationDegrees: result[4]! as int,
     );
   }
 
@@ -338,7 +358,7 @@ class SwitchCameraResult {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(capability, other.capability) && _deepEquals(textureId, other.textureId) && _deepEquals(previewWidth, other.previewWidth) && _deepEquals(previewHeight, other.previewHeight);
+    return _deepEquals(capability, other.capability) && _deepEquals(textureId, other.textureId) && _deepEquals(previewWidth, other.previewWidth) && _deepEquals(previewHeight, other.previewHeight) && _deepEquals(sensorOrientationDegrees, other.sensorOrientationDegrees);
   }
 
   @override
@@ -347,7 +367,7 @@ class SwitchCameraResult {
 
   @override
   String toString() {
-    return 'SwitchCameraResult(capability: $capability, textureId: $textureId, previewWidth: $previewWidth, previewHeight: $previewHeight)';
+    return 'SwitchCameraResult(capability: $capability, textureId: $textureId, previewWidth: $previewWidth, previewHeight: $previewHeight, sensorOrientationDegrees: $sensorOrientationDegrees)';
   }
 }
 

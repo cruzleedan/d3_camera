@@ -34,6 +34,7 @@ class CameraState {
     this.capability,
     this.textureId,
     this.previewSize,
+    this.sensorOrientationDegrees,
     this.flashMode = FlashMode.off,
     this.zoomRatio = 1.0,
     this.exposureCompensation = 0.0,
@@ -60,6 +61,13 @@ class CameraState {
   /// Null under the same conditions as [textureId].
   final Size? previewSize;
 
+  /// `CameraCharacteristics.SENSOR_ORIENTATION` for [activeLens], in
+  /// degrees. `CustomCameraPreview` uses this to correct the Texture's
+  /// rotation on the Dart side — required because Flutter's
+  /// SurfaceProducer texture path does not apply this correction itself
+  /// on API 29+ devices. Null under the same conditions as [textureId].
+  final int? sensorOrientationDegrees;
+
   final FlashMode flashMode;
   final double zoomRatio;
   final double exposureCompensation;
@@ -74,6 +82,7 @@ class CameraState {
     int? textureId,
     bool clearTextureId = false,
     Size? previewSize,
+    int? sensorOrientationDegrees,
     FlashMode? flashMode,
     double? zoomRatio,
     double? exposureCompensation,
@@ -86,6 +95,9 @@ class CameraState {
       capability: capability ?? this.capability,
       textureId: clearTextureId ? null : (textureId ?? this.textureId),
       previewSize: clearTextureId ? null : (previewSize ?? this.previewSize),
+      sensorOrientationDegrees: clearTextureId
+          ? null
+          : (sensorOrientationDegrees ?? this.sensorOrientationDegrees),
       flashMode: flashMode ?? this.flashMode,
       zoomRatio: zoomRatio ?? this.zoomRatio,
       exposureCompensation: exposureCompensation ?? this.exposureCompensation,
@@ -103,6 +115,7 @@ class CameraState {
           capability == other.capability &&
           textureId == other.textureId &&
           previewSize == other.previewSize &&
+          sensorOrientationDegrees == other.sensorOrientationDegrees &&
           flashMode == other.flashMode &&
           zoomRatio == other.zoomRatio &&
           exposureCompensation == other.exposureCompensation &&
@@ -115,6 +128,7 @@ class CameraState {
     capability,
     textureId,
     previewSize,
+    sensorOrientationDegrees,
     flashMode,
     zoomRatio,
     exposureCompensation,
@@ -125,7 +139,8 @@ class CameraState {
   String toString() =>
       'CameraState(status: $status, activeLens: $activeLens, '
       'capability: $capability, textureId: $textureId, '
-      'previewSize: $previewSize, flashMode: $flashMode, '
-      'zoomRatio: $zoomRatio, '
+      'previewSize: $previewSize, '
+      'sensorOrientationDegrees: $sensorOrientationDegrees, '
+      'flashMode: $flashMode, zoomRatio: $zoomRatio, '
       'exposureCompensation: $exposureCompensation, lastError: $lastError)';
 }

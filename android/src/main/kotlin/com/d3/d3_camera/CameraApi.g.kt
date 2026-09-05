@@ -340,7 +340,20 @@ data class InitializeResult (
    * ratio rather than assuming one.
    */
   val previewWidth: Long,
-  val previewHeight: Long
+  val previewHeight: Long,
+  /**
+   * CameraCharacteristics.SENSOR_ORIENTATION for the bound lens, in
+   * degrees. Flutter's Texture/SurfaceProducer path does NOT
+   * automatically correct for this on API 29+ (the ImageReader-backed
+   * rendering path, used on nearly all current devices, explicitly does
+   * not handle rotation metadata -- see
+   * TextureRegistry.SurfaceProducer#handlesCropAndRotation). Rotation
+   * correction is applied in Dart, in CustomCameraPreview, using this
+   * value -- mirroring the same fix Flutter's own official
+   * camera_android_camerax plugin applies (flutter/packages#8629)
+   * after hitting the identical bug.
+   */
+  val sensorOrientationDegrees: Long
 )
  {
   companion object {
@@ -349,7 +362,8 @@ data class InitializeResult (
       val textureId = pigeonVar_list[1] as Long
       val previewWidth = pigeonVar_list[2] as Long
       val previewHeight = pigeonVar_list[3] as Long
-      return InitializeResult(capability, textureId, previewWidth, previewHeight)
+      val sensorOrientationDegrees = pigeonVar_list[4] as Long
+      return InitializeResult(capability, textureId, previewWidth, previewHeight, sensorOrientationDegrees)
     }
   }
   fun toList(): List<Any?> {
@@ -358,6 +372,7 @@ data class InitializeResult (
       textureId,
       previewWidth,
       previewHeight,
+      sensorOrientationDegrees,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -368,7 +383,7 @@ data class InitializeResult (
       return true
     }
     val other = other as InitializeResult
-    return CameraApiPigeonUtils.deepEquals(this.capability, other.capability) && CameraApiPigeonUtils.deepEquals(this.textureId, other.textureId) && CameraApiPigeonUtils.deepEquals(this.previewWidth, other.previewWidth) && CameraApiPigeonUtils.deepEquals(this.previewHeight, other.previewHeight)
+    return CameraApiPigeonUtils.deepEquals(this.capability, other.capability) && CameraApiPigeonUtils.deepEquals(this.textureId, other.textureId) && CameraApiPigeonUtils.deepEquals(this.previewWidth, other.previewWidth) && CameraApiPigeonUtils.deepEquals(this.previewHeight, other.previewHeight) && CameraApiPigeonUtils.deepEquals(this.sensorOrientationDegrees, other.sensorOrientationDegrees)
   }
 
   override fun hashCode(): Int {
@@ -377,10 +392,11 @@ data class InitializeResult (
     result = 31 * result + CameraApiPigeonUtils.deepHash(this.textureId)
     result = 31 * result + CameraApiPigeonUtils.deepHash(this.previewWidth)
     result = 31 * result + CameraApiPigeonUtils.deepHash(this.previewHeight)
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.sensorOrientationDegrees)
     return result
   }
   override fun toString(): String {
-    return "InitializeResult(capability=$capability, textureId=$textureId, previewWidth=$previewWidth, previewHeight=$previewHeight)"
+    return "InitializeResult(capability=$capability, textureId=$textureId, previewWidth=$previewWidth, previewHeight=$previewHeight, sensorOrientationDegrees=$sensorOrientationDegrees)"
   }
 }
 
@@ -388,8 +404,8 @@ data class InitializeResult (
  * Result of [CameraHostApi.switchCamera]: mirrors [InitializeResult]
  * since switching cameras rebinds the whole CameraX use-case group,
  * including Preview -- the texture id (and possibly the preview
- * resolution) may change and capability must be re-read for the newly
- * bound lens.
+ * resolution/sensor orientation) may change and capability must be
+ * re-read for the newly bound lens.
  *
  * Generated class from Pigeon that represents data sent in messages.
  */
@@ -397,7 +413,8 @@ data class SwitchCameraResult (
   val capability: CameraCapabilityData,
   val textureId: Long,
   val previewWidth: Long,
-  val previewHeight: Long
+  val previewHeight: Long,
+  val sensorOrientationDegrees: Long
 )
  {
   companion object {
@@ -406,7 +423,8 @@ data class SwitchCameraResult (
       val textureId = pigeonVar_list[1] as Long
       val previewWidth = pigeonVar_list[2] as Long
       val previewHeight = pigeonVar_list[3] as Long
-      return SwitchCameraResult(capability, textureId, previewWidth, previewHeight)
+      val sensorOrientationDegrees = pigeonVar_list[4] as Long
+      return SwitchCameraResult(capability, textureId, previewWidth, previewHeight, sensorOrientationDegrees)
     }
   }
   fun toList(): List<Any?> {
@@ -415,6 +433,7 @@ data class SwitchCameraResult (
       textureId,
       previewWidth,
       previewHeight,
+      sensorOrientationDegrees,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -425,7 +444,7 @@ data class SwitchCameraResult (
       return true
     }
     val other = other as SwitchCameraResult
-    return CameraApiPigeonUtils.deepEquals(this.capability, other.capability) && CameraApiPigeonUtils.deepEquals(this.textureId, other.textureId) && CameraApiPigeonUtils.deepEquals(this.previewWidth, other.previewWidth) && CameraApiPigeonUtils.deepEquals(this.previewHeight, other.previewHeight)
+    return CameraApiPigeonUtils.deepEquals(this.capability, other.capability) && CameraApiPigeonUtils.deepEquals(this.textureId, other.textureId) && CameraApiPigeonUtils.deepEquals(this.previewWidth, other.previewWidth) && CameraApiPigeonUtils.deepEquals(this.previewHeight, other.previewHeight) && CameraApiPigeonUtils.deepEquals(this.sensorOrientationDegrees, other.sensorOrientationDegrees)
   }
 
   override fun hashCode(): Int {
@@ -434,10 +453,11 @@ data class SwitchCameraResult (
     result = 31 * result + CameraApiPigeonUtils.deepHash(this.textureId)
     result = 31 * result + CameraApiPigeonUtils.deepHash(this.previewWidth)
     result = 31 * result + CameraApiPigeonUtils.deepHash(this.previewHeight)
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.sensorOrientationDegrees)
     return result
   }
   override fun toString(): String {
-    return "SwitchCameraResult(capability=$capability, textureId=$textureId, previewWidth=$previewWidth, previewHeight=$previewHeight)"
+    return "SwitchCameraResult(capability=$capability, textureId=$textureId, previewWidth=$previewWidth, previewHeight=$previewHeight, sensorOrientationDegrees=$sensorOrientationDegrees)"
   }
 }
 

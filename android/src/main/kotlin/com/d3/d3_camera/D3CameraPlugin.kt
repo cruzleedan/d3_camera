@@ -47,6 +47,7 @@ class D3CameraPlugin :
             textureId = bound.textureId,
             previewWidth = bound.previewWidth.toLong(),
             previewHeight = bound.previewHeight.toLong(),
+            sensorOrientationDegrees = bound.sensorOrientationDegrees.toLong(),
         )
     }
 
@@ -102,6 +103,7 @@ class D3CameraPlugin :
             textureId = bound.textureId,
             previewWidth = bound.previewWidth.toLong(),
             previewHeight = bound.previewHeight.toLong(),
+            sensorOrientationDegrees = bound.sensorOrientationDegrees.toLong(),
         )
     }
 
