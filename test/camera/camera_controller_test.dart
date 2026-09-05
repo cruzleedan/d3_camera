@@ -4,6 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'fake_camera_platform.dart';
 
 void main() {
+  // CustomCameraController.initialize()/dispose() call
+  // SystemChrome.setPreferredOrientations to lock/restore portrait
+  // orientation for the camera session -- that's a real platform-channel
+  // call, which requires a binding to exist even though flutter_test
+  // mocks the channel response. Plain `test()` (as opposed to
+  // `testWidgets()`) doesn't initialize one on its own.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('CustomCameraController.initialize', () {
     test('transitions uninitialized -> initializing -> ready', () async {
       final platform = FakeCameraPlatform();
@@ -39,6 +47,22 @@ void main() {
 
       expect(platform.lastRequestedLensDirection, CameraLensDirection.front);
       expect(controller.value.activeLens, CameraLensDirection.front);
+    });
+
+    test('requests the configured initial aspect ratio', () async {
+      final platform = FakeCameraPlatform();
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(
+          initialAspectRatio: AspectRatioPreset.ratio16x9,
+        ),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+
+      await controller.initialize();
+
+      expect(platform.lastRequestedAspectRatio, AspectRatioPreset.ratio16x9);
+      expect(controller.value.aspectRatio, AspectRatioPreset.ratio16x9);
     });
 
     test('populates capability from the platform on success', () async {
@@ -219,6 +243,385 @@ void main() {
       expect(
         () => platform.emitEvent(CameraPlatformEvent.disconnected),
         returnsNormally,
+      );
+    });
+  });
+
+  group('CustomCameraController.captureImage', () {
+    test('transitions ready -> capturing -> ready and returns the result', () async {
+      final platform = FakeCameraPlatform();
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      final statuses = <CameraStatus>[];
+      controller.addListener(() => statuses.add(controller.value.status));
+
+      final result = await controller.captureImage();
+
+      expect(statuses, [CameraStatus.capturing, CameraStatus.ready]);
+      expect(result, platform.captureResultToReturn);
+      expect(platform.captureImageCallCount, 1);
+    });
+
+    test('throws InvalidCameraStateException if not ready', () async {
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: FakeCameraPlatform(),
+      );
+      addTearDown(controller.dispose);
+
+      expect(
+        () => controller.captureImage(),
+        throwsA(isA<InvalidCameraStateException>()),
+      );
+    });
+
+    test('a second concurrent call throws while the first is in flight', () async {
+      final platform = FakeCameraPlatform();
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      final first = controller.captureImage();
+      expect(
+        () => controller.captureImage(),
+        throwsA(isA<InvalidCameraStateException>()),
+      );
+      await first;
+    });
+
+    test('transitions to error and rethrows on platform failure', () async {
+      final platform = FakeCameraPlatform(
+        captureError: const CaptureFailedException('sensor busy'),
+      );
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      await expectLater(
+        controller.captureImage(),
+        throwsA(isA<CaptureFailedException>()),
+      );
+      expect(controller.value.status, CameraStatus.error);
+    });
+  });
+
+  group('CustomCameraController.setFlashMode', () {
+    test('updates state on success', () async {
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: FakeCameraPlatform(),
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      await controller.setFlashMode(FlashMode.on);
+
+      expect(controller.value.flashMode, FlashMode.on);
+    });
+
+    test('throws InvalidCameraStateException if not ready', () async {
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: FakeCameraPlatform(),
+      );
+      addTearDown(controller.dispose);
+
+      expect(
+        () => controller.setFlashMode(FlashMode.on),
+        throwsA(isA<InvalidCameraStateException>()),
+      );
+    });
+
+    test('transitions to error when the device has no flash unit', () async {
+      final platform = FakeCameraPlatform(
+        setFlashModeError: const UnsupportedCapabilityException('flash'),
+      );
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      await expectLater(
+        controller.setFlashMode(FlashMode.on),
+        throwsA(isA<UnsupportedCapabilityException>()),
+      );
+      expect(controller.value.status, CameraStatus.error);
+    });
+  });
+
+  group('CustomCameraController.switchCamera', () {
+    test('transitions ready -> switchingCamera -> ready, updates activeLens', () async {
+      final platform = FakeCameraPlatform();
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(
+          initialLensDirection: CameraLensDirection.back,
+        ),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      final statuses = <CameraStatus>[];
+      controller.addListener(() => statuses.add(controller.value.status));
+
+      await controller.switchCamera();
+
+      expect(statuses, [CameraStatus.switchingCamera, CameraStatus.ready]);
+      expect(controller.value.activeLens, CameraLensDirection.front);
+      expect(platform.lastSwitchTarget, CameraLensDirection.front);
+    });
+
+    test('switches to an explicit lens when provided', () async {
+      final platform = FakeCameraPlatform();
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(
+          initialLensDirection: CameraLensDirection.back,
+        ),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      await controller.switchCamera(to: CameraLensDirection.back);
+
+      expect(platform.lastSwitchTarget, CameraLensDirection.back);
+    });
+
+    test('clears textureId while switching', () async {
+      final platform = FakeCameraPlatform();
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      expect(controller.value.textureId, isNotNull);
+
+      int? textureIdDuringSwitch = -1;
+      controller.addListener(() {
+        if (controller.value.status == CameraStatus.switchingCamera) {
+          textureIdDuringSwitch = controller.value.textureId;
+        }
+      });
+
+      await controller.switchCamera();
+
+      expect(textureIdDuringSwitch, isNull);
+      expect(controller.value.textureId, isNotNull);
+    });
+
+    test('throws InvalidCameraStateException if not ready', () async {
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: FakeCameraPlatform(),
+      );
+      addTearDown(controller.dispose);
+
+      expect(
+        () => controller.switchCamera(),
+        throwsA(isA<InvalidCameraStateException>()),
+      );
+    });
+  });
+
+  group('CustomCameraController.setAspectRatio', () {
+    test('transitions ready -> switchingCamera -> ready, updates aspectRatio', () async {
+      final platform = FakeCameraPlatform();
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      expect(controller.value.aspectRatio, AspectRatioPreset.ratio4x3);
+
+      final statuses = <CameraStatus>[];
+      controller.addListener(() => statuses.add(controller.value.status));
+
+      await controller.setAspectRatio(AspectRatioPreset.ratio16x9);
+
+      expect(statuses, [CameraStatus.switchingCamera, CameraStatus.ready]);
+      expect(controller.value.aspectRatio, AspectRatioPreset.ratio16x9);
+      expect(platform.lastAspectRatioTarget, AspectRatioPreset.ratio16x9);
+    });
+
+    test('clears textureId while switching', () async {
+      final platform = FakeCameraPlatform();
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      int? textureIdDuringSwitch = -1;
+      controller.addListener(() {
+        if (controller.value.status == CameraStatus.switchingCamera) {
+          textureIdDuringSwitch = controller.value.textureId;
+        }
+      });
+
+      await controller.setAspectRatio(AspectRatioPreset.ratio16x9);
+
+      expect(textureIdDuringSwitch, isNull);
+      expect(controller.value.textureId, isNotNull);
+    });
+
+    test('throws InvalidCameraStateException if not ready', () async {
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: FakeCameraPlatform(),
+      );
+      addTearDown(controller.dispose);
+
+      expect(
+        () => controller.setAspectRatio(AspectRatioPreset.ratio16x9),
+        throwsA(isA<InvalidCameraStateException>()),
+      );
+    });
+
+    test('transitions to error and rethrows on platform failure', () async {
+      final platform = FakeCameraPlatform(
+        setAspectRatioError: const CameraInitializationException('rebind failed'),
+      );
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      await expectLater(
+        controller.setAspectRatio(AspectRatioPreset.ratio16x9),
+        throwsA(isA<CameraInitializationException>()),
+      );
+      expect(controller.value.status, CameraStatus.error);
+    });
+  });
+
+  group('CustomCameraController.setZoom', () {
+    test('clamps to the reported capability range before calling the platform', () async {
+      final platform = FakeCameraPlatform(
+        capabilityToReturn: const CameraCapability(
+          hasFlash: true,
+          minZoomRatio: 1,
+          maxZoomRatio: 4,
+          supportsTapToFocus: true,
+          supportsExposureCompensation: true,
+          minExposureCompensation: -2,
+          maxExposureCompensation: 2,
+          availableLenses: [CameraLensDirection.back],
+        ),
+      );
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      await controller.setZoom(10.0);
+
+      expect(platform.lastZoomRatio, 4.0);
+      expect(controller.value.zoomRatio, 4.0);
+    });
+
+    test('throws InvalidCameraStateException if not ready', () async {
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: FakeCameraPlatform(),
+      );
+      addTearDown(controller.dispose);
+
+      expect(
+        () => controller.setZoom(2.0),
+        throwsA(isA<InvalidCameraStateException>()),
+      );
+    });
+  });
+
+  group('CustomCameraController.setExposureCompensation', () {
+    test('clamps to the reported capability range before calling the platform', () async {
+      final platform = FakeCameraPlatform(
+        capabilityToReturn: const CameraCapability(
+          hasFlash: true,
+          minZoomRatio: 1,
+          maxZoomRatio: 4,
+          supportsTapToFocus: true,
+          supportsExposureCompensation: true,
+          minExposureCompensation: -2,
+          maxExposureCompensation: 2,
+          availableLenses: [CameraLensDirection.back],
+        ),
+      );
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      await controller.setExposureCompensation(5.0);
+
+      expect(platform.lastExposureCompensation, 2.0);
+      expect(controller.value.exposureCompensation, 2.0);
+    });
+  });
+
+  group('CustomCameraController.setMeteringPoint', () {
+    test('forwards the normalized point to the platform', () async {
+      final platform = FakeCameraPlatform();
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      const point = NormalizedPoint(0.3, 0.7);
+      await controller.setMeteringPoint(point);
+
+      expect(platform.lastMeteringPoint, point);
+    });
+
+    test('null resumes continuous focus/exposure', () async {
+      final platform = FakeCameraPlatform();
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: platform,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+
+      await controller.setMeteringPoint(const NormalizedPoint(0.5, 0.5));
+      await controller.setMeteringPoint(null);
+
+      expect(platform.lastMeteringPoint, isNull);
+    });
+
+    test('throws InvalidCameraStateException if not ready', () async {
+      final controller = CustomCameraController(
+        configuration: const CameraConfiguration(),
+        platform: FakeCameraPlatform(),
+      );
+      addTearDown(controller.dispose);
+
+      expect(
+        () => controller.setMeteringPoint(const NormalizedPoint(0.5, 0.5)),
+        throwsA(isA<InvalidCameraStateException>()),
       );
     });
   });

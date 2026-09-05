@@ -1,5 +1,6 @@
 import 'package:meta/meta.dart';
 
+import 'aspect_ratio_preset.dart';
 import 'camera_capability.dart';
 
 /// Declarative startup intent for a `CustomCameraController` — what the
@@ -11,21 +12,30 @@ import 'camera_capability.dart';
 class CameraConfiguration {
   const CameraConfiguration({
     this.initialLensDirection = CameraLensDirection.back,
+    this.initialAspectRatio = AspectRatioPreset.ratio4x3,
   });
 
   final CameraLensDirection initialLensDirection;
+
+  /// 4:3 by default, matching the native camera app convention this
+  /// package's example follows. Change it live after `initialize()` via
+  /// `CustomCameraController.setAspectRatio` — this field only controls
+  /// the starting value.
+  final AspectRatioPreset initialAspectRatio;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is CameraConfiguration &&
           runtimeType == other.runtimeType &&
-          initialLensDirection == other.initialLensDirection;
+          initialLensDirection == other.initialLensDirection &&
+          initialAspectRatio == other.initialAspectRatio;
 
   @override
-  int get hashCode => initialLensDirection.hashCode;
+  int get hashCode => Object.hash(initialLensDirection, initialAspectRatio);
 
   @override
   String toString() =>
-      'CameraConfiguration(initialLensDirection: $initialLensDirection)';
+      'CameraConfiguration(initialLensDirection: $initialLensDirection, '
+      'initialAspectRatio: $initialAspectRatio)';
 }

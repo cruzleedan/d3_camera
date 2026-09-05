@@ -6,181 +6,231 @@ void main() {
   runApp(const D3CameraExampleApp());
 }
 
-/// Phase 1 functional demo: requests the camera permission, initializes
-/// the controller, and displays the resulting state/capability. No
-/// preview or capture yet -- this exists to prove the Pigeon contract
-/// and CameraX session binding work end-to-end on a real device, per
-/// WORK-0020's Definition of Done. The recommended integration pattern
-/// this shows -- request permission via a plugin of the consuming app's
-/// choice, then call initialize() -- is deliberate: d3_camera does not
-/// take a permissions-plugin dependency itself (see CameraConfiguration/
-/// CustomCameraController docs).
+/// Demonstrates d3_camera's three layers of use, from turnkey to fully
+/// custom. Each is built from the layer beneath it, so starting at the
+/// top costs nothing in flexibility later.
+///
+/// Note what none of these do: request permission themselves. The
+/// package takes no permissions-plugin dependency -- which one to use is
+/// the app's choice -- so each entry point takes a callback. Here that
+/// closes over `permission_handler`.
 class D3CameraExampleApp extends StatelessWidget {
   const D3CameraExampleApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(title: const Text('d3_camera example — Phase 1')),
-        body: const _CameraFoundationDemo(),
+      theme: ThemeData.dark(),
+      home: const _HomeScreen(),
+    );
+  }
+}
+
+Future<bool> _requestCameraPermission() async =>
+    (await Permission.camera.request()).isGranted;
+
+class _HomeScreen extends StatelessWidget {
+  const _HomeScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('d3_camera example')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _ExampleTile(
+            title: 'Turnkey screen',
+            subtitle:
+                'D3CameraScreen.show() -- one call, returns the capture. '
+                'The whole camera in a single line.',
+            onTap: () async {
+              final capture = await D3CameraScreen.show(
+                context,
+                requestPermission: _requestCameraPermission,
+              );
+              if (context.mounted && capture != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Captured ${capture.width}x${capture.height}',
+                    ),
+                  ),
+                );
+              }
+            },
+          ),
+          _ExampleTile(
+            title: 'Embedded screen',
+            subtitle:
+                'The same screen with controls switched off and a capture '
+                'callback, embedded in your own route.',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const _EmbeddedScreenDemo()),
+            ),
+          ),
+          _ExampleTile(
+            title: 'Custom UI',
+            subtitle:
+                'D3CameraScope hands you a ready controller; every pixel of '
+                'the UI is yours.',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const _CustomUiDemo()),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _CameraFoundationDemo extends StatefulWidget {
-  const _CameraFoundationDemo();
-
-  @override
-  State<_CameraFoundationDemo> createState() => _CameraFoundationDemoState();
-}
-
-class _CameraFoundationDemoState extends State<_CameraFoundationDemo> {
-  late final CustomCameraController _controller;
-  String? _errorMessage;
-  bool _permissionDenied = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = CustomCameraController(
-      configuration: const CameraConfiguration(),
-    );
-    _controller.addListener(_onControllerChanged);
-    _requestPermissionAndInitialize();
-  }
-
-  void _onControllerChanged() => setState(() {});
-
-  Future<void> _requestPermissionAndInitialize() async {
-    final status = await Permission.camera.request();
-    if (!status.isGranted) {
-      setState(() => _permissionDenied = true);
-      return;
-    }
-
-    try {
-      await _controller.initialize();
-    } on CustomCameraException catch (e) {
-      setState(() => _errorMessage = e.message);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.removeListener(_onControllerChanged);
-    _controller.dispose();
-    super.dispose();
-  }
+/// The turnkey screen, minus the controls this app doesn't want, with
+/// the capture handled inline rather than popped as a route result.
+class _EmbeddedScreenDemo extends StatelessWidget {
+  const _EmbeddedScreenDemo();
 
   @override
   Widget build(BuildContext context) {
-    if (_permissionDenied) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'Camera permission was denied. Grant it in system settings and '
-            'restart the app to retry.',
-            textAlign: TextAlign.center,
-          ),
+    return D3CameraScreen(
+      requestPermission: _requestCameraPermission,
+      configuration: const CameraConfiguration(
+        initialAspectRatio: AspectRatioPreset.ratio16x9,
+      ),
+      showAspectRatioToggle: false,
+      showFlashToggle: false,
+      onClose: () => Navigator.of(context).pop(),
+      onCaptured: (capture) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Got ${capture.filePath}')),
+        );
+      },
+    );
+  }
+}
+
+/// The composable layer: D3CameraScope owns the controller's lifecycle
+/// (permission, initialize, listen, dispose) and hands over a ready
+/// controller, leaving the entire UI to us. This is the level the
+/// package's own D3CameraScreen is built at.
+class _CustomUiDemo extends StatefulWidget {
+  const _CustomUiDemo();
+
+  @override
+  State<_CustomUiDemo> createState() => _CustomUiDemoState();
+}
+
+class _CustomUiDemoState extends State<_CustomUiDemo> {
+  PreviewFit _fit = PreviewFit.cover;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: D3CameraScope(
+        requestPermission: _requestCameraPermission,
+        builder: (context, controller) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              // A deliberately square box, not the feed's own aspect
+              // ratio: cover and contain only differ when the box and
+              // the content disagree, so this is what makes the fit
+              // toggle below actually show something. Sizing the box to
+              // displayPreviewSize (as D3CameraScreen does) makes the
+              // two modes identical.
+              Center(
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: ColoredBox(
+                    color: const Color(0xFF202020),
+                    child: CustomCameraPreview(
+                      controller: controller,
+                      fit: _fit,
+                    ),
+                  ),
+                ),
+              ),
+              Align(
+                alignment: Alignment.topCenter,
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: TextButton(
+                      onPressed: () => setState(() {
+                        _fit = _fit == PreviewFit.cover
+                            ? PreviewFit.contain
+                            : PreviewFit.cover;
+                      }),
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.black54,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text('fit: ${_fit.name} (tap to toggle)'),
+                    ),
+                  ),
+                ),
+              ),
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 48),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Entirely custom controls',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                      const SizedBox(height: 12),
+                      D3ShutterButton(
+                        onPressed: () async {
+                          final capture = await controller.captureImage();
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Captured ${capture.width}x${capture.height}',
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ExampleTile extends StatelessWidget {
+  const _ExampleTile({
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 8,
         ),
-      );
-    }
-
-    final state = _controller.value;
-
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _StatusRow(label: 'Status', value: state.status.name),
-          _StatusRow(
-            label: 'Active lens',
-            value: state.activeLens?.name ?? '—',
-          ),
-          if (_errorMessage != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(
-                'Error: $_errorMessage',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ),
-          if (state.lastError != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Text(
-                'Controller error: ${state.lastError}',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ),
-          if (state.capability case final capability?) ...[
-            const Padding(
-              padding: EdgeInsets.only(top: 24, bottom: 8),
-              child: Text(
-                'Detected capability',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            _StatusRow(
-              label: 'Has flash',
-              value: capability.hasFlash.toString(),
-            ),
-            _StatusRow(
-              label: 'Zoom range',
-              value:
-                  '${capability.minZoomRatio.toStringAsFixed(1)}–'
-                  '${capability.maxZoomRatio.toStringAsFixed(1)}',
-            ),
-            _StatusRow(
-              label: 'Tap to focus',
-              value: capability.supportsTapToFocus.toString(),
-            ),
-            _StatusRow(
-              label: 'Exposure compensation',
-              value: capability.supportsExposureCompensation
-                  ? '${capability.minExposureCompensation.toStringAsFixed(1)}'
-                        '–${capability.maxExposureCompensation.toStringAsFixed(1)} EV'
-                  : 'not supported',
-            ),
-            _StatusRow(
-              label: 'Available lenses',
-              value: capability.availableLenses
-                  .map((l) => l.name)
-                  .join(', '),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _StatusRow extends StatelessWidget {
-  const _StatusRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 160,
-            child: Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-          Expanded(child: Text(value)),
-        ],
       ),
     );
   }

@@ -51,16 +51,76 @@ rest of this codebase's private planning docs. In short:
 5. Performance optimization
 6. Testing / device compatibility
 
-## Getting started (once functional)
+## Getting started
+
+The package offers three layers. Each is built from the one beneath it,
+so starting at the top costs nothing in flexibility later — when you
+outgrow a layer, drop to the next rather than fighting its options.
+
+### 1. Turnkey — a working camera in one call
 
 ```dart
-final cameraController = CustomCameraController(
-  configuration: const CameraConfiguration(),
+final capture = await D3CameraScreen.show(
+  context,
+  requestPermission: () async =>
+      (await Permission.camera.request()).isGranted,
 );
-await cameraController.initialize();
-
-CustomCameraPreview(controller: cameraController);
 ```
 
-See `example/` for a fuller build-your-own-UI walkthrough as the package
-matures.
+Live preview, shutter, pinch- and tap-to-zoom, flash, 4:3/16:9 toggle,
+camera switch, tap-to-focus, a close button, and a post-capture review
+screen. Individual controls can be switched off (`showFlashToggle:
+false`, …).
+
+When the screen is embedded rather than pushed, give it an `onClose` so
+its close button does something meaningful in your own flow:
+
+```dart
+D3CameraScreen(
+  onClose: () => Navigator.of(context).pop(),
+  onCaptured: (capture) { /* … */ },
+)
+```
+
+### 2. Lifecycle handled, UI yours
+
+`D3CameraScope` owns the controller's lifecycle — permission,
+initialize, listen, dispose — and hands you a ready controller:
+
+```dart
+D3CameraScope(
+  requestPermission: myPermissionRequest,
+  builder: (context, controller) => Stack(
+    children: [
+      CustomCameraPreview(controller: controller),
+      MyOwnControls(controller: controller),
+    ],
+  ),
+)
+```
+
+Individual control widgets (`D3ShutterButton`, `D3ZoomLevelBar`,
+`D3FlashButton`, `D3AspectRatioButton`) are exported, so you can mix
+built-in chrome with your own.
+
+### 3. Full control
+
+```dart
+final controller = CustomCameraController(
+  configuration: const CameraConfiguration(),
+);
+await controller.initialize();
+
+CustomCameraPreview(controller: controller);
+```
+
+**Sizing the preview:** use `state.displayPreviewSize`, not
+`previewSize`. The latter is the sensor-space resolution, which is
+landscape on a portrait-held phone — sizing a box from it frames the feed
+sideways relative to the captured image.
+
+**Permissions:** this package takes no permissions-plugin dependency —
+which one to use is your app's choice — so every entry point accepts a
+callback instead.
+
+See `example/` for all three layers running side by side.

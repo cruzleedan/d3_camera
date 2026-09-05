@@ -1,6 +1,12 @@
+import 'dart:ui' show Size;
+
 import 'package:flutter/services.dart' show PlatformException;
 
+import '../camera/aspect_ratio_preset.dart';
 import '../camera/camera_capability.dart';
+import '../camera/capture_result.dart';
+import '../camera/flash_mode.dart';
+import '../coordinates/normalized_point.dart';
 import '../errors/camera_exceptions.dart';
 import 'camera_platform_interface.dart';
 import 'pigeon/camera_api.g.dart' as pigeon;
@@ -29,27 +35,85 @@ class MethodChannelCameraPlatform extends pigeon.CameraFlutterApi
   }
 
   @override
-  Future<CameraCapability> initialize(
+  Future<CameraSessionInfo> initialize(
     CameraLensDirection initialLensDirection,
-  ) async {
-    try {
-      final data = await _hostApi.initialize(
-        _toPigeonLensDirection(initialLensDirection),
-      );
-      return _fromPigeonCapability(data);
-    } on PlatformException catch (e) {
-      throw _mapPlatformException(e);
-    }
-  }
+    AspectRatioPreset initialAspectRatio,
+  ) => _guard(() async {
+    final result = await _hostApi.initialize(
+      _toPigeonLensDirection(initialLensDirection),
+      _toPigeonAspectRatio(initialAspectRatio),
+    );
+    return _fromPigeonSessionInfo(
+      result.capability,
+      result.textureId,
+      result.previewWidth,
+      result.previewHeight,
+      result.sensorOrientationDegrees,
+    );
+  });
 
   @override
-  Future<void> dispose() async {
-    try {
-      await _hostApi.dispose();
-    } on PlatformException catch (e) {
-      throw _mapPlatformException(e);
-    }
-  }
+  Future<void> dispose() => _guard(_hostApi.dispose);
+
+  @override
+  Future<ImageCaptureResult> captureImage() => _guard(() async {
+    final result = await _hostApi.captureImage();
+    return ImageCaptureResult(
+      filePath: result.filePath,
+      width: result.width,
+      height: result.height,
+      exifOrientationDegrees: result.exifOrientationDegrees,
+      capturedLensDirection: _fromPigeonLensDirection(
+        result.capturedLensDirection,
+      ),
+    );
+  });
+
+  @override
+  Future<void> setFlashMode(FlashMode mode) =>
+      _guard(() => _hostApi.setFlashMode(_toPigeonFlashMode(mode)));
+
+  @override
+  Future<CameraSessionInfo> switchCamera(CameraLensDirection lensDirection) =>
+      _guard(() async {
+        final result = await _hostApi.switchCamera(
+          _toPigeonLensDirection(lensDirection),
+        );
+        return _fromPigeonSessionInfo(
+          result.capability,
+          result.textureId,
+          result.previewWidth,
+          result.previewHeight,
+          result.sensorOrientationDegrees,
+        );
+      });
+
+  @override
+  Future<CameraSessionInfo> setAspectRatio(AspectRatioPreset aspectRatio) =>
+      _guard(() async {
+        final result = await _hostApi.setAspectRatio(
+          _toPigeonAspectRatio(aspectRatio),
+        );
+        return _fromPigeonSessionInfo(
+          result.capability,
+          result.textureId,
+          result.previewWidth,
+          result.previewHeight,
+          result.sensorOrientationDegrees,
+        );
+      });
+
+  @override
+  Future<void> setZoom(double zoomRatio) =>
+      _guard(() => _hostApi.setZoom(zoomRatio));
+
+  @override
+  Future<void> setMeteringPoint(NormalizedPoint? point) =>
+      _guard(() => _hostApi.setMeteringPoint(_toPigeonPoint(point)));
+
+  @override
+  Future<void> setExposureCompensation(double ev) =>
+      _guard(() => _hostApi.setExposureCompensation(ev));
 
   // pigeon.CameraFlutterApi override — called by the native side.
   @override
@@ -66,6 +130,17 @@ class MethodChannelCameraPlatform extends pigeon.CameraFlutterApi
   }
 }
 
+/// Runs [body], translating any [PlatformException] into the typed
+/// exception hierarchy. Centralized here so every `CameraHostApi` call
+/// site gets the same mapping without repeating a try/catch.
+Future<T> _guard<T>(Future<T> Function() body) async {
+  try {
+    return await body();
+  } on PlatformException catch (e) {
+    throw _mapPlatformException(e);
+  }
+}
+
 CustomCameraException _mapPlatformException(PlatformException e) {
   switch (e.code) {
     case 'permission_denied':
@@ -76,9 +151,15 @@ CustomCameraException _mapPlatformException(PlatformException e) {
       return CameraUnavailableException(
         e.message ?? 'Camera is unavailable.',
       );
+    case 'capability_unsupported':
+      return UnsupportedCapabilityException(e.message ?? e.code);
+    case 'capture_failed':
+      return CaptureFailedException(
+        e.message ?? 'Image capture failed.',
+      );
     default:
       return CameraInitializationException(
-        e.message ?? 'Camera initialization failed (${e.code}).',
+        e.message ?? 'Camera operation failed (${e.code}).',
       );
   }
 }
@@ -92,6 +173,15 @@ pigeon.LensDirection _toPigeonLensDirection(CameraLensDirection direction) {
   }
 }
 
+pigeon.AspectRatioPresetData _toPigeonAspectRatio(AspectRatioPreset preset) {
+  switch (preset) {
+    case AspectRatioPreset.ratio4x3:
+      return pigeon.AspectRatioPresetData.ratio4x3;
+    case AspectRatioPreset.ratio16x9:
+      return pigeon.AspectRatioPresetData.ratio16x9;
+  }
+}
+
 CameraLensDirection _fromPigeonLensDirection(pigeon.LensDirection direction) {
   switch (direction) {
     case pigeon.LensDirection.front:
@@ -99,6 +189,22 @@ CameraLensDirection _fromPigeonLensDirection(pigeon.LensDirection direction) {
     case pigeon.LensDirection.back:
       return CameraLensDirection.back;
   }
+}
+
+pigeon.FlashModeData _toPigeonFlashMode(FlashMode mode) {
+  switch (mode) {
+    case FlashMode.off:
+      return pigeon.FlashModeData.off;
+    case FlashMode.on:
+      return pigeon.FlashModeData.on;
+    case FlashMode.auto:
+      return pigeon.FlashModeData.auto;
+  }
+}
+
+pigeon.NormalizedPointData? _toPigeonPoint(NormalizedPoint? point) {
+  if (point == null) return null;
+  return pigeon.NormalizedPointData(x: point.x, y: point.y);
 }
 
 CameraCapability _fromPigeonCapability(pigeon.CameraCapabilityData data) {
@@ -113,6 +219,21 @@ CameraCapability _fromPigeonCapability(pigeon.CameraCapabilityData data) {
     availableLenses: data.availableLenses
         .map(_fromPigeonLensDirection)
         .toList(growable: false),
+  );
+}
+
+CameraSessionInfo _fromPigeonSessionInfo(
+  pigeon.CameraCapabilityData capability,
+  int textureId,
+  int previewWidth,
+  int previewHeight,
+  int sensorOrientationDegrees,
+) {
+  return CameraSessionInfo(
+    capability: _fromPigeonCapability(capability),
+    textureId: textureId,
+    previewSize: Size(previewWidth.toDouble(), previewHeight.toDouble()),
+    sensorOrientationDegrees: sensorOrientationDegrees,
   );
 }
 

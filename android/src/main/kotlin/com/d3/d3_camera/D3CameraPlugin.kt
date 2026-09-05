@@ -1,14 +1,15 @@
 package com.d3.d3_camera
 
+import androidx.camera.core.ImageCapture
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 
 /**
  * Registers this plugin and implements [CameraHostApi] -- the Kotlin side
- * of the Phase 1 Pigeon contract. Delegates all actual CameraX work to
- * [CameraXSession]/[CameraCapabilityReader]; this class's own job is
- * wiring the generated API to those collaborators and translating
- * failures into [FlutterError]s with stable codes the Dart side maps onto
- * its typed exception hierarchy.
+ * of the Pigeon contract. Delegates all actual CameraX work to
+ * [CameraXSession]/[CameraCapabilityReader]/[ImageCaptureHandler]; this
+ * class's own job is wiring the generated API to those collaborators and
+ * translating failures into [FlutterError]s with stable codes the Dart
+ * side maps onto its typed exception hierarchy.
  *
  * `CameraHostApi.setUp` (generated) already launches each call in its own
  * coroutine and catches any [Throwable] to relay back to Dart -- this
@@ -20,10 +21,12 @@ class D3CameraPlugin :
     CameraHostApi {
     private var session: CameraXSession? = null
     private var flutterApi: CameraFlutterApi? = null
+    private var cacheDir: java.io.File? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        session = CameraXSession(binding.applicationContext)
+        session = CameraXSession(binding.applicationContext, binding.textureRegistry)
         flutterApi = CameraFlutterApi(binding.binaryMessenger)
+        cacheDir = binding.applicationContext.cacheDir
         CameraHostApi.setUp(binding.binaryMessenger, this)
     }
 
@@ -31,27 +34,132 @@ class D3CameraPlugin :
         session?.unbind()
         session = null
         flutterApi = null
+        cacheDir = null
         CameraHostApi.setUp(binding.binaryMessenger, null)
     }
 
-    override suspend fun initialize(initialLensDirection: LensDirection): CameraCapabilityData {
-        val activeSession =
-            session
-                ?: throw FlutterError(
+    override suspend fun initialize(
+        initialLensDirection: LensDirection,
+        initialAspectRatio: AspectRatioPresetData,
+    ): CameraSessionResultData {
+        val activeSession = requireSession()
+        val bound = bindOrThrow(activeSession, initialLensDirection, initialAspectRatio)
+        return bound.toResultData(activeSession)
+    }
+
+    override suspend fun dispose() {
+        session?.unbind()
+    }
+
+    override suspend fun captureImage(): CaptureResultData {
+        val activeSession = requireSession()
+        val dir =
+            cacheDir
+                ?: throw FlutterError("camera_unavailable", "Plugin is not attached.", null)
+        try {
+            val result = activeSession.captureImage(dir)
+            return CaptureResultData(
+                filePath = result.filePath,
+                width = result.width.toLong(),
+                height = result.height.toLong(),
+                exifOrientationDegrees = result.exifOrientationDegrees.toLong(),
+                capturedLensDirection = result.capturedLensDirection,
+            )
+        } catch (e: IllegalStateException) {
+            throw FlutterError("camera_unavailable", e.message, null)
+        } catch (e: Exception) {
+            throw FlutterError("capture_failed", e.message ?: "Image capture failed.", null)
+        }
+    }
+
+    override suspend fun setFlashMode(mode: FlashModeData) {
+        val activeSession = requireSession()
+        if (mode != FlashModeData.OFF && !activeSession.hasFlashUnit()) {
+            throw FlutterError(
+                "capability_unsupported",
+                "The active lens has no flash unit.",
+                null,
+            )
+        }
+        activeSession.setFlashMode(
+            when (mode) {
+                FlashModeData.OFF -> ImageCapture.FLASH_MODE_OFF
+                FlashModeData.ON -> ImageCapture.FLASH_MODE_ON
+                FlashModeData.AUTO -> ImageCapture.FLASH_MODE_AUTO
+            },
+        )
+    }
+
+    override suspend fun switchCamera(lensDirection: LensDirection): CameraSessionResultData {
+        val activeSession = requireSession()
+        val bound =
+            try {
+                activeSession.switchLens(lensDirection)
+            } catch (e: IllegalArgumentException) {
+                throw FlutterError(
                     "camera_unavailable",
-                    "Plugin is not attached to a Flutter engine.",
+                    e.message ?: "No camera available for the requested lens direction.",
                     null,
                 )
+            } catch (e: SecurityException) {
+                throw FlutterError("permission_denied", e.message ?: "Camera permission was denied.", null)
+            } catch (e: IllegalStateException) {
+                throw FlutterError("camera_unavailable", e.message, null)
+            }
+        return bound.toResultData(activeSession)
+    }
 
-        try {
-            val cameraInfo = activeSession.bind(initialLensDirection)
-            return CameraCapabilityReader.read(
-                cameraInfo,
-                activeSession.availableLensDirections(),
+    override suspend fun setAspectRatio(aspectRatio: AspectRatioPresetData): CameraSessionResultData {
+        val activeSession = requireSession()
+        val bound =
+            try {
+                activeSession.setAspectRatio(aspectRatio)
+            } catch (e: IllegalStateException) {
+                throw FlutterError("camera_unavailable", e.message, null)
+            }
+        return bound.toResultData(activeSession)
+    }
+
+    override suspend fun setZoom(zoomRatio: Double) {
+        requireSession().setZoomRatio(zoomRatio.toFloat())
+    }
+
+    override suspend fun setMeteringPoint(point: NormalizedPointData?) {
+        val activeSession = requireSession()
+        if (point == null) {
+            activeSession.resumeContinuousFocus()
+        } else {
+            activeSession.setMeteringPoint(point.x.toFloat(), point.y.toFloat())
+        }
+    }
+
+    override suspend fun setExposureCompensation(ev: Double) {
+        // CameraX works in exposure-index steps, not raw EV -- the
+        // caller (Dart) already clamps to the device's EV range, so the
+        // conversion here only needs to invert CameraCapabilityReader's
+        // own step-to-EV multiplication, not re-clamp.
+        val activeSession = requireSession()
+        val step = activeSession.exposureCompensationStep()
+        val index = if (step == 0.0) 0 else Math.round(ev / step).toInt()
+        activeSession.setExposureCompensationIndex(index)
+    }
+
+    private fun requireSession(): CameraXSession =
+        session
+            ?: throw FlutterError(
+                "camera_unavailable",
+                "Plugin is not attached to a Flutter engine.",
+                null,
             )
+
+    private suspend fun bindOrThrow(
+        activeSession: CameraXSession,
+        lensDirection: LensDirection,
+        aspectRatio: AspectRatioPresetData,
+    ): CameraXSession.BoundSession {
+        try {
+            return activeSession.bind(lensDirection, aspectRatio)
         } catch (e: IllegalArgumentException) {
-            // CameraX's own signal that no camera matches the requested
-            // selector.
             throw FlutterError(
                 "camera_unavailable",
                 e.message ?: "No camera available for the requested lens direction.",
@@ -66,7 +174,15 @@ class D3CameraPlugin :
         }
     }
 
-    override suspend fun dispose() {
-        session?.unbind()
-    }
+    private fun CameraXSession.BoundSession.toResultData(
+        activeSession: CameraXSession,
+    ): CameraSessionResultData =
+        CameraSessionResultData(
+            capability =
+                CameraCapabilityReader.read(cameraInfo, activeSession.availableLensDirections()),
+            textureId = textureId,
+            previewWidth = previewWidth.toLong(),
+            previewHeight = previewHeight.toLong(),
+            sensorOrientationDegrees = sensorOrientationDegrees.toLong(),
+        )
 }
