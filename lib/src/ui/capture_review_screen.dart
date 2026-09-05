@@ -2,6 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../annotations/annotation_controller.dart';
+import '../annotations/annotation_overlay_widget.dart';
+import '../annotations/annotation_tool.dart';
 import '../camera/capture_result.dart';
 
 /// Full-screen post-capture review: shows what was just captured until
@@ -19,6 +22,8 @@ class D3CaptureReviewScreen extends StatelessWidget {
     required this.onDismiss,
     this.onAccept,
     this.showMetadata = false,
+    this.annotationController,
+    this.annotationTool = AnnotationTool.rectangle,
   });
 
   final ImageCaptureResult capture;
@@ -29,19 +34,22 @@ class D3CaptureReviewScreen extends StatelessWidget {
   /// it's a debugging aid, not something an end user needs.
   final bool showMetadata;
 
+  /// When supplied, an [AnnotationOverlay] is laid over the photo and
+  /// the user can mark it up. Null (the default) leaves this a plain
+  /// review screen.
+  ///
+  /// The overlay shares the photo's own box -- sized to the image's
+  /// real pixel dimensions -- so both resolve the same content rect and
+  /// a mark lands where it was drawn.
+  final AnnotationController? annotationController;
+
+  /// Which tool the overlay's next drag uses. Owned by the caller,
+  /// since a tool picker is UI this screen deliberately does not
+  /// dictate.
+  final AnnotationTool annotationTool;
+
   @override
   Widget build(BuildContext context) {
-    // Constrained to its own real aspect ratio via AspectRatio + BoxFit.
-    // contain, rather than a plain Image.file inside a bare Center --
-    // Image.file with no explicit constraint scales to fill whatever
-    // space its parent gives it, and an unconstrained Center in a
-    // full-screen Stack hands it the entire screen height. Confirmed as
-    // a real, measured bug on-device: the review screen showed visibly
-    // more of the photo's vertical extent than the live feed had framed,
-    // breaking the user's expectation that what they framed is what they
-    // get.
-    final captureAspectRatio = capture.width / capture.height;
-
     // This screen may be shown by swapping state rather than pushing a
     // route, in which case nothing sits on the navigator stack for
     // Android's back gesture to pop -- without claiming the intent here,
@@ -59,11 +67,43 @@ class D3CaptureReviewScreen extends StatelessWidget {
           children: [
             SafeArea(
               child: Center(
-                child: AspectRatio(
-                  aspectRatio: captureAspectRatio,
-                  child: Image.file(
-                    File(capture.filePath),
-                    fit: BoxFit.contain,
+                // A SizedBox at the image's true pixel size, scaled by
+                // FittedBox to fill whichever axis runs out first.
+                //
+                // The earlier AspectRatio was sized by the available
+                // *height* alone, so a portrait photo in a landscape
+                // window rendered as a narrow column with the horizontal
+                // space unused -- the photo got smaller when the screen
+                // got wider. FittedBox scales instead of constraining.
+                //
+                // Keeping a single box around image and overlay is the
+                // load-bearing part: it is what stops the two disagreeing
+                // about where content sits. Sizing it to the image's own
+                // pixels makes that agreement structural rather than a
+                // matching pair of aspect-ratio calculations.
+                child: FittedBox(
+                  child: SizedBox(
+                    width: capture.width.toDouble(),
+                    height: capture.height.toDouble(),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.file(File(capture.filePath), fit: BoxFit.contain),
+                        // The box is the image's own pixel size, so the
+                        // overlay's imageSize and its bounds are the
+                        // same rect by construction -- they cannot
+                        // disagree about where content sits.
+                        if (annotationController case final controller?)
+                          AnnotationOverlay(
+                            controller: controller,
+                            imageSize: Size(
+                              capture.width.toDouble(),
+                              capture.height.toDouble(),
+                            ),
+                            tool: annotationTool,
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),

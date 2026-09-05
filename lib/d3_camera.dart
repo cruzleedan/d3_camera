@@ -19,9 +19,13 @@ export 'src/camera/camera_state.dart';
 export 'src/camera/capture_result.dart';
 export 'src/camera/flash_mode.dart';
 
-// Preview
+// Preview. computePreviewContentRect is public because the annotation
+// overlay must compute the *same* content rect the preview renders
+// into -- sharing this one function is what keeps a mark where the user
+// drew it, rather than two implementations drifting apart.
 export 'src/preview/camera_preview_widget.dart';
 export 'src/preview/preview_fit.dart';
+export 'src/preview/preview_transform.dart';
 
 // Ready-made UI. Three layers, from most to least turnkey:
 //   D3CameraScreen -- a complete working camera screen
@@ -35,8 +39,21 @@ export 'src/ui/camera_screen.dart';
 export 'src/ui/capture_review_screen.dart';
 export 'src/ui/zoom_level_bar.dart';
 
+// Annotations. Geometry is always normalized [0,1] image space (see
+// Coordinates below) so a mark drawn on a preview lands in the same
+// place on a full-resolution export.
+export 'src/annotations/annotation.dart';
+export 'src/annotations/annotation_controller.dart';
+export 'src/annotations/annotation_overlay_widget.dart';
+export 'src/annotations/annotation_painter.dart';
+export 'src/annotations/annotation_style.dart';
+export 'src/annotations/annotation_tool.dart';
+export 'src/annotations/hit_testing.dart';
+
 // Coordinates
+export 'src/coordinates/coordinate_space.dart';
 export 'src/coordinates/normalized_point.dart';
+export 'src/coordinates/normalized_rect.dart';
 
 // Platform (exported so a consumer can supply a fake CameraPlatform in
 // their own widget tests, same pattern this package's own tests use)
