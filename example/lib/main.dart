@@ -319,23 +319,39 @@ class _CaptureReviewScreen extends StatelessWidget {
               ),
             ),
           ),
+          // Column, not a bare Row: this sits in a StackFit.expand Stack,
+          // so a Row here stretches to the full screen height and its
+          // default centered cross-axis alignment parks both children
+          // halfway down the screen, floating over the middle of the
+          // photo. Pinning the close button to the top edge and the
+          // metadata caption to the bottom keeps each anchored to a real
+          // edge, the way a native review screen reads.
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _ControlButton(icon: Icons.close, onPressed: onDismiss),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black45,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '${capture.width}x${capture.height} '
-                      '(${capture.capturedLensDirection.name})',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  const Spacer(),
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black45,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        '${capture.width}x${capture.height} '
+                        '(${capture.capturedLensDirection.name})',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
                     ),
                   ),
                 ],
