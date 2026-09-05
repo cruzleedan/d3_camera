@@ -78,6 +78,15 @@ class _HomeScreen extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const _CustomUiDemo()),
             ),
           ),
+          _ExampleTile(
+            title: 'Annotate a photo',
+            subtitle:
+                'Capture, then mark it up. Geometry is normalized, so a '
+                'mark lands in the same place on the full-resolution file.',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const _AnnotateDemo()),
+            ),
+          ),
         ],
       ),
     );
@@ -232,6 +241,119 @@ class _ExampleTile extends StatelessWidget {
           vertical: 8,
         ),
       ),
+    );
+  }
+}
+
+
+/// Capture a photo, then annotate it. The overlay shares the photo's own
+/// AspectRatio box, so both resolve the same content rect -- which is
+/// what keeps a mark on the feature the user drew it over.
+class _AnnotateDemo extends StatefulWidget {
+  const _AnnotateDemo();
+
+  @override
+  State<_AnnotateDemo> createState() => _AnnotateDemoState();
+}
+
+class _AnnotateDemoState extends State<_AnnotateDemo> {
+  final _annotations = AnnotationController();
+  ImageCaptureResult? _capture;
+  AnnotationTool _tool = AnnotationTool.rectangle;
+
+  @override
+  void dispose() {
+    _annotations.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final capture = _capture;
+    if (capture == null) {
+      return D3CameraScreen(
+        requestPermission: _requestCameraPermission,
+        showReview: false,
+        onClose: () => Navigator.of(context).pop(),
+        onCaptured: (result) => setState(() => _capture = result),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Column(
+        children: [
+          Expanded(
+            child: D3CaptureReviewScreen(
+              capture: capture,
+              annotationController: _annotations,
+              annotationTool: _tool,
+              onDismiss: () => Navigator.of(context).pop(),
+            ),
+          ),
+          _AnnotationToolbar(
+            tool: _tool,
+            controller: _annotations,
+            onToolChanged: (t) => setState(() => _tool = t),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnnotationToolbar extends StatelessWidget {
+  const _AnnotationToolbar({
+    required this.tool,
+    required this.controller,
+    required this.onToolChanged,
+  });
+
+  final AnnotationTool tool;
+  final AnnotationController controller;
+  final ValueChanged<AnnotationTool> onToolChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                for (final t in AnnotationTool.values)
+                  IconButton(
+                    onPressed: () => onToolChanged(t),
+                    color: t == tool ? Colors.amber : Colors.white70,
+                    icon: Icon(switch (t) {
+                      AnnotationTool.select => Icons.touch_app,
+                      AnnotationTool.rectangle => Icons.crop_square,
+                      AnnotationTool.circle => Icons.circle_outlined,
+                      AnnotationTool.arrow => Icons.arrow_outward,
+                      AnnotationTool.freehand => Icons.gesture,
+                    }),
+                  ),
+                IconButton(
+                  onPressed: controller.canUndo ? controller.undo : null,
+                  color: Colors.white70,
+                  disabledColor: Colors.white24,
+                  icon: const Icon(Icons.undo),
+                ),
+                IconButton(
+                  onPressed: controller.canRedo ? controller.redo : null,
+                  color: Colors.white70,
+                  disabledColor: Colors.white24,
+                  icon: const Icon(Icons.redo),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
