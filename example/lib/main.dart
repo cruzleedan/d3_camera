@@ -162,14 +162,19 @@ class _CameraDemoScreenState extends State<_CameraDemoScreen> {
     // floating controls -- the feed occupies a fixed rectangular area
     // (its own aspect ratio, letterboxed against the rest of the
     // screen), and shutter/zoom/flash/switch live below it in their own
-    // dedicated space, never overlapping the image. previewSize's own
-    // aspect ratio drives the box below rather than a hardcoded 4:3,
+    // dedicated space, never overlapping the image. displayPreviewSize's
+    // own aspect ratio drives the box below rather than a hardcoded 4:3,
     // since it already reflects whatever CameraX actually negotiated
     // (see CameraXSession's AspectRatioStrategy, which keeps Preview and
     // ImageCapture on the same ratio).
-    final previewAspectRatio = state.previewSize == null
+    //
+    // Note displayPreviewSize, not previewSize: the latter is sensor-space
+    // (landscape) and would give a 4:3 box around 3:4 content, making the
+    // feed's proportions the reverse of the captured image's.
+    final displaySize = state.displayPreviewSize;
+    final previewAspectRatio = displaySize == null
         ? 3 / 4
-        : state.previewSize!.width / state.previewSize!.height;
+        : displaySize.width / displaySize.height;
 
     return Scaffold(
       backgroundColor: Colors.black,

@@ -82,6 +82,32 @@ class CameraState {
   /// Non-null only when [status] is [CameraStatus.error].
   final CustomCameraException? lastError;
 
+  /// [previewSize] rotated into *display* space — the aspect ratio the
+  /// feed actually occupies on screen once `CustomCameraPreview`'s
+  /// rotation correction is applied.
+  ///
+  /// [previewSize] is the resolution CameraX negotiated in *sensor*
+  /// space, which on a portrait-held phone is landscape (e.g. 4000x3000
+  /// for a 4:3 session, since the sensor is mounted 90 degrees rotated).
+  /// A consumer sizing its own box — an `AspectRatio` around the preview,
+  /// say — needs the post-rotation dimensions instead, or it gets a
+  /// landscape box around portrait content: the feed then renders 4:3
+  /// while `captureImage()` returns a 3:4 image. Use this getter for any
+  /// layout decision; use [previewSize] only when you specifically want
+  /// the sensor-space resolution.
+  ///
+  /// Null under the same conditions as [previewSize].
+  Size? get displayPreviewSize {
+    final size = previewSize;
+    final sensorDegrees = sensorOrientationDegrees;
+    if (size == null || sensorDegrees == null) return null;
+    // A 90/270-degree correction swaps which dimension reads as width.
+    // Derived from the sensor angle alone (not the lens-direction sign)
+    // because the sign only flips 90 <-> 270, and both swap alike.
+    final swapsAxes = (sensorDegrees ~/ 90).isOdd;
+    return swapsAxes ? Size(size.height, size.width) : size;
+  }
+
   CameraState copyWith({
     CameraStatus? status,
     CameraLensDirection? activeLens,

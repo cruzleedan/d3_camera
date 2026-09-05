@@ -78,10 +78,11 @@ class CustomCameraPreview extends StatelessWidget {
         // purposes, even though the Texture itself is still built at its
         // original, pre-rotation size (RotatedBox rotates the already-
         // laid-out child, it doesn't relayout it against swapped
-        // constraints).
-        final rotatedContentSize = (quarterTurns % 2 == 0)
-            ? previewSize
-            : Size(previewSize.height, previewSize.width);
+        // constraints). This is exactly what CameraState.displayPreviewSize
+        // exposes to consumers, so share it rather than recomputing --
+        // the box a consumer lays out and the content drawn inside it
+        // must agree on orientation.
+        final rotatedContentSize = state.displayPreviewSize!;
 
         return LayoutBuilder(
           builder: (context, constraints) {
