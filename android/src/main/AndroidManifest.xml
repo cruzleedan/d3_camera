@@ -1,3 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
   package="com.d3.d3_camera">
+
+  <!-- Declared here so any consuming app's merged manifest picks it up
+       automatically. The package never requests this permission at
+       runtime itself: see CustomCameraController.initialize. The
+       consuming app is responsible for requesting it before calling
+       initialize(). -->
+  <uses-permission android:name="android.permission.CAMERA" />
+
+  <!-- required is false: this package targets phones broadly, not only
+       devices that declare a camera feature (e.g. some tablets/Chrome OS
+       devices report no camera feature but may still expose one). Actual
+       camera availability is detected at initialize() time, not gated by
+       this manifest declaration. -->
+  <uses-feature
+    android:name="android.hardware.camera"
+    android:required="false" />
 </manifest>
