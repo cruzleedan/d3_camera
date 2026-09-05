@@ -4,6 +4,7 @@ import '../camera/camera_configuration.dart';
 import '../camera/camera_controller.dart';
 import '../camera/camera_state.dart';
 import '../errors/camera_exceptions.dart';
+import '../platform/camera_platform_interface.dart';
 
 /// Signature for the permission check a consumer supplies to
 /// [D3CameraScope]. Return `true` once camera permission is granted.
@@ -42,6 +43,7 @@ class D3CameraScope extends StatefulWidget {
     this.loadingBuilder,
     this.errorBuilder,
     this.permissionDeniedBuilder,
+    @visibleForTesting this.platform,
   });
 
   /// Called with an initialized, ready-to-use controller.
@@ -68,6 +70,12 @@ class D3CameraScope extends StatefulWidget {
   /// explanatory message.
   final WidgetBuilder? permissionDeniedBuilder;
 
+  /// Injectable platform for tests, mirroring
+  /// [CustomCameraController]'s own hook. Production code leaves this
+  /// null and gets the real method-channel implementation.
+  @visibleForTesting
+  final CameraPlatform? platform;
+
   @override
   State<D3CameraScope> createState() => _D3CameraScopeState();
 }
@@ -80,7 +88,13 @@ class _D3CameraScopeState extends State<D3CameraScope> {
   @override
   void initState() {
     super.initState();
-    _controller = CustomCameraController(configuration: widget.configuration);
+    _controller = CustomCameraController(
+      configuration: widget.configuration,
+      // Forwarding this widget's own @visibleForTesting seam to the
+      // controller's.
+      // ignore: invalid_use_of_visible_for_testing_member
+      platform: widget.platform,
+    );
     _controller.addListener(_onControllerChanged);
     _start();
   }

@@ -9,20 +9,35 @@ import '../camera/camera_controller.dart';
 /// testing as awkward to hit). Levels are generated from the device's
 /// own reported zoom range rather than hardcoded, since that range
 /// varies per device and lens.
+///
+/// The steps stop at [maxLevel] even when the device reports far more
+/// (some phones advertise 20x or higher, which is mostly digital
+/// upscaling and made the bar read as noise). The full hardware range
+/// stays reachable by pinching the feed -- the bar is for quick jumps
+/// between useful focal lengths, not for exposing every ratio.
 class D3ZoomLevelBar extends StatelessWidget {
-  const D3ZoomLevelBar({super.key, required this.controller});
+  const D3ZoomLevelBar({
+    super.key,
+    required this.controller,
+    this.maxLevel = 5.0,
+  });
 
   final CustomCameraController controller;
 
+  /// Highest discrete step offered. The device's own maximum is used
+  /// instead when it is lower than this.
+  final double maxLevel;
+
   List<double> _levels(double min, double max) {
+    final ceiling = max < maxLevel ? max : maxLevel;
     return <double>{
       min,
       1.0,
       2.0,
       3.0,
       5.0,
-      max,
-    }.where((level) => level >= min && level <= max).toList()..sort();
+      ceiling,
+    }.where((level) => level >= min && level <= ceiling).toList()..sort();
   }
 
   @override
@@ -32,6 +47,29 @@ class D3ZoomLevelBar extends StatelessWidget {
 
     final levels = _levels(capability.minZoomRatio, capability.maxZoomRatio);
     final current = controller.value.zoomRatio;
+
+    // Pinching lands between steps, where no pill matches. Rather than
+    // showing an inert bar mid-gesture, collapse to a single readout of
+    // the live ratio -- the same thing native camera apps do while a
+    // pinch is in progress.
+    final atDiscreteLevel = levels.any((l) => (current - l).abs() < 0.05);
+    if (!atDiscreteLevel) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.black45,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          '${current.toStringAsFixed(1)}x',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),

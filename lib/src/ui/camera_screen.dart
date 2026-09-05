@@ -8,6 +8,7 @@ import '../camera/capture_result.dart';
 import '../camera/flash_mode.dart';
 import '../coordinates/normalized_point.dart';
 import '../errors/camera_exceptions.dart';
+import '../platform/camera_platform_interface.dart';
 import '../preview/camera_preview_widget.dart';
 import 'camera_control_buttons.dart';
 import 'camera_scope.dart';
@@ -26,8 +27,11 @@ import 'zoom_level_bar.dart';
 /// those parts rather than fighting this one's options.
 ///
 /// The controls follow where Pixel Camera and iOS Camera place theirs --
-/// the feed in its own rect, never full-bleed behind floating buttons,
-/// with zoom directly above the shutter and flash/ratio/switch below.
+/// zoom directly above the shutter, flash/ratio/switch below it, all
+/// overlaying the feed's lower edge. The feed itself keeps the full
+/// screen width at every aspect ratio and grows downward as the ratio
+/// gets taller, so switching 4:3 -> 16:9 shows *more*, not a smaller
+/// letterboxed rect.
 class D3CameraScreen extends StatefulWidget {
   const D3CameraScreen({
     super.key,
@@ -39,6 +43,8 @@ class D3CameraScreen extends StatefulWidget {
     this.showFlashToggle = true,
     this.showCameraSwitch = true,
     this.showZoomBar = true,
+    this.enablePinchToZoom = true,
+    @visibleForTesting this.platform,
   });
 
   final CameraConfiguration configuration;
@@ -60,6 +66,15 @@ class D3CameraScreen extends StatefulWidget {
   final bool showFlashToggle;
   final bool showCameraSwitch;
   final bool showZoomBar;
+
+  /// Pinch anywhere on the feed to zoom, in addition to the zoom bar's
+  /// discrete steps. Independent of [showZoomBar] -- pinch alone is a
+  /// reasonable setup when screen space is tight.
+  final bool enablePinchToZoom;
+
+  /// Injectable platform for tests; see [D3CameraScope.platform].
+  @visibleForTesting
+  final CameraPlatform? platform;
 
   /// Pushes this screen and completes with the accepted capture, or null
   /// if the user backed out without taking one.
@@ -95,6 +110,10 @@ class _D3CameraScreenState extends State<D3CameraScreen> {
     return D3CameraScope(
       configuration: widget.configuration,
       requestPermission: widget.requestPermission,
+      // Forwarding this widget's own @visibleForTesting seam to the
+      // scope's.
+      // ignore: invalid_use_of_visible_for_testing_member
+      platform: widget.platform,
       builder: (context, controller) {
         if (_reviewingCapture case final capture?) {
           return D3CaptureReviewScreen(
@@ -174,102 +193,136 @@ class _CameraScreenBody extends StatelessWidget {
         ? 3 / 4
         : displaySize.width / displaySize.height;
 
+    // Where the feed's bottom edge lands, so the controls can hug it.
+    // At 16:9 the feed runs past the screen bottom and the controls stay
+    // pinned to the screen; at 4:3 it ends partway down and the controls
+    // ride up to sit on the feed rather than stranding the zoom bar in
+    // the black band below it.
+    final media = MediaQuery.of(context);
+    final feedTop = media.padding.top;
+    final feedHeight = media.size.width / previewAspectRatio;
+    final feedBottom = feedTop + feedHeight;
+    final bottomInset = (media.size.height - feedBottom).clamp(
+      media.padding.bottom,
+      double.infinity,
+    );
+
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: previewAspectRatio,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      CustomCameraPreview(controller: controller),
-                      if (capability?.supportsTapToFocus ?? false)
-                        _TapToFocusLayer(
-                          enabled: isReady,
-                          onTap: (point) => _guard(
-                            context,
-                            () => controller.setMeteringPoint(point),
-                          ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // The feed is pinned to the full screen width and anchored to
+          // the top, its height following the aspect ratio -- so
+          // switching 4:3 -> 16:9 makes the feed *taller*, the way
+          // native camera apps behave. Sizing it inside an Expanded +
+          // Center instead would fit the available height, which shrinks
+          // the width for taller ratios and reads as the feed getting
+          // smaller when the user asked for more.
+          // Only the top inset is honored: the feed clears the status
+          // bar but keeps full width, and is free to run under the
+          // bottom inset where the controls overlay it.
+          Padding(
+            padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: AspectRatio(
+                aspectRatio: previewAspectRatio,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CustomCameraPreview(controller: controller),
+                    if (capability?.supportsTapToFocus ?? false)
+                      _TapToFocusLayer(
+                        enabled: isReady,
+                        onTap: (point) => _guard(
+                          context,
+                          () => controller.setMeteringPoint(point),
                         ),
-                    ],
-                  ),
+                      ),
+                    if (config.enablePinchToZoom)
+                      _PinchToZoomLayer(controller: controller),
+                  ],
                 ),
               ),
             ),
+          ),
 
-            // Control panel, entirely below the feed rect -- zoom
-            // directly above the shutter, flash/ratio/switch below it,
-            // matching where Pixel Camera and iOS Camera place them.
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    height: 32,
-                    child:
-                        config.showZoomBar &&
-                            isReady &&
-                            (capability?.maxZoomRatio ?? 1) > 1
-                        ? D3ZoomLevelBar(controller: controller)
-                        : null,
-                  ),
-                  const SizedBox(height: 16),
-                  D3ShutterButton(
-                    onPressed: isReady ? () => _capture(context) : null,
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (config.showFlashToggle)
-                        D3FlashButton(
-                          flashMode: state.flashMode,
-                          onPressed: (isReady && (capability?.hasFlash ?? false))
-                              ? () => _guard(
-                                  context,
-                                  () => controller.setFlashMode(
-                                    _nextFlashMode(state.flashMode),
-                                  ),
-                                )
-                              : null,
-                        ),
-                      if (config.showAspectRatioToggle) ...[
-                        const SizedBox(width: 32),
-                        D3AspectRatioButton(
-                          aspectRatio: state.aspectRatio,
-                          onPressed: isReady
-                              ? () => _guard(
-                                  context,
-                                  () => controller.setAspectRatio(
-                                    _nextAspectRatio(state.aspectRatio),
-                                  ),
-                                )
-                              : null,
-                        ),
+          // Controls overlay the feed's lower edge rather than sitting
+          // in their own reserved strip, so the feed keeps full width at
+          // every ratio -- zoom directly above the shutter, with
+          // flash/ratio/switch below, matching Pixel and iOS Camera.
+          Padding(
+            padding: EdgeInsets.only(bottom: bottomInset),
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      height: 32,
+                      child:
+                          config.showZoomBar &&
+                              isReady &&
+                              (capability?.maxZoomRatio ?? 1) > 1
+                          ? D3ZoomLevelBar(controller: controller)
+                          : null,
+                    ),
+                    const SizedBox(height: 16),
+                    D3ShutterButton(
+                      onPressed: isReady ? () => _capture(context) : null,
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (config.showFlashToggle)
+                          D3FlashButton(
+                            flashMode: state.flashMode,
+                            onPressed:
+                                (isReady && (capability?.hasFlash ?? false))
+                                ? () => _guard(
+                                    context,
+                                    () => controller.setFlashMode(
+                                      _nextFlashMode(state.flashMode),
+                                    ),
+                                  )
+                                : null,
+                          ),
+                        if (config.showAspectRatioToggle) ...[
+                          const SizedBox(width: 32),
+                          D3AspectRatioButton(
+                            aspectRatio: state.aspectRatio,
+                            onPressed: isReady
+                                ? () => _guard(
+                                    context,
+                                    () => controller.setAspectRatio(
+                                      _nextAspectRatio(state.aspectRatio),
+                                    ),
+                                  )
+                                : null,
+                          ),
+                        ],
+                        if (config.showCameraSwitch &&
+                            (capability?.availableLenses.length ?? 0) > 1) ...[
+                          const SizedBox(width: 32),
+                          D3CameraControlButton(
+                            icon: Icons.cameraswitch,
+                            onPressed: isReady
+                                ? () => _guard(context, controller.switchCamera)
+                                : null,
+                          ),
+                        ],
                       ],
-                      if (config.showCameraSwitch &&
-                          (capability?.availableLenses.length ?? 0) > 1) ...[
-                        const SizedBox(width: 32),
-                        D3CameraControlButton(
-                          icon: Icons.cameraswitch,
-                          onPressed: isReady
-                              ? () =>
-                                    _guard(context, controller.switchCamera)
-                              : null,
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -285,6 +338,51 @@ class _CameraScreenBody extends StatelessWidget {
         AspectRatioPreset.ratio4x3 => AspectRatioPreset.ratio16x9,
         AspectRatioPreset.ratio16x9 => AspectRatioPreset.ratio4x3,
       };
+}
+
+/// Pinch-to-zoom over the preview.
+///
+/// Scales relative to the zoom ratio at gesture start rather than
+/// accumulating per-update deltas, so a pinch that returns to its
+/// starting spread returns to its starting zoom instead of drifting.
+/// The controller clamps to the device's reported range, so this only
+/// needs to pass the multiplied value through.
+class _PinchToZoomLayer extends StatefulWidget {
+  const _PinchToZoomLayer({required this.controller});
+
+  final CustomCameraController controller;
+
+  @override
+  State<_PinchToZoomLayer> createState() => _PinchToZoomLayerState();
+}
+
+class _PinchToZoomLayerState extends State<_PinchToZoomLayer> {
+  double _zoomAtGestureStart = 1;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onScaleStart: (_) {
+        _zoomAtGestureStart = widget.controller.value.zoomRatio;
+      },
+      onScaleUpdate: (details) {
+        // A single-pointer drag also reports here with scale == 1;
+        // ignoring it keeps taps and drags from nudging zoom and
+        // stealing the tap-to-focus gesture.
+        if (details.pointerCount < 2) return;
+        // A pinch fires many updates a second, and setZoom throws if the
+        // controller has left `ready` (a capture passes through
+        // `capturing`). Skipping those, and swallowing the race where
+        // status changes between this check and the call, keeps a
+        // mid-gesture capture from raising an uncaught async error.
+        if (widget.controller.value.status != CameraStatus.ready) return;
+        widget.controller
+            .setZoom(_zoomAtGestureStart * details.scale)
+            .catchError((Object _) {});
+      },
+    );
+  }
 }
 
 /// Translates a tap anywhere on the preview into a normalized metering
