@@ -29,6 +29,18 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
+  # Example-app-only dependency, demonstrating the recommended integration
+  # pattern (the package itself never depends on a permissions plugin --
+  # see CameraConfiguration/CustomCameraController). Pinned to 11.4.0
+  # (not ^13.x) because permission_handler_android 14.x hardcodes
+  # `compileSdk = 37`, and Android SDK Platform 37 has not yet published a
+  # plain (non-decimal) `android-37` package as of this writing -- only
+  # `android-37.0`/`.1`/`.2` exist, which AGP's manifest merge does not
+  # resolve to the bare `android-37` target hash it requests. Bump this
+  # once permission_handler_android targets an SDK version that's
+  # actually installable, or once platform 37 finalizes.
+  permission_handler: 11.4.0
+
 dev_dependencies:
   integration_test:
     sdk: flutter
