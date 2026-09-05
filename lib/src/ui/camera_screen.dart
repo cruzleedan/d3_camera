@@ -10,6 +10,7 @@ import '../coordinates/normalized_point.dart';
 import '../errors/camera_exceptions.dart';
 import '../platform/camera_platform_interface.dart';
 import '../preview/camera_preview_widget.dart';
+import '../preview/preview_fit.dart';
 import 'camera_control_buttons.dart';
 import 'camera_scope.dart';
 import 'capture_review_screen.dart';
@@ -46,6 +47,7 @@ class D3CameraScreen extends StatefulWidget {
     this.enablePinchToZoom = true,
     this.onClose,
     this.showCloseButton = true,
+    this.previewFit = PreviewFit.cover,
     @visibleForTesting this.platform,
   });
 
@@ -87,6 +89,12 @@ class D3CameraScreen extends StatefulWidget {
   /// out but the system back gesture is a dead end on any screen that
   /// isn't the app's root.
   final bool showCloseButton;
+
+  /// How the feed fills its box. This screen sizes that box to the
+  /// feed's own aspect ratio, so the two modes coincide here; it is
+  /// exposed for consumers who wrap this screen in a differently-shaped
+  /// container.
+  final PreviewFit previewFit;
 
   /// Injectable platform for tests; see [D3CameraScope.platform].
   @visibleForTesting
@@ -248,7 +256,10 @@ class _CameraScreenBody extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    CustomCameraPreview(controller: controller),
+                    CustomCameraPreview(
+                      controller: controller,
+                      fit: config.previewFit,
+                    ),
                     if (capability?.supportsTapToFocus ?? false)
                       _TapToFocusLayer(
                         enabled: isReady,

@@ -113,8 +113,15 @@ class _EmbeddedScreenDemo extends StatelessWidget {
 /// (permission, initialize, listen, dispose) and hands over a ready
 /// controller, leaving the entire UI to us. This is the level the
 /// package's own D3CameraScreen is built at.
-class _CustomUiDemo extends StatelessWidget {
+class _CustomUiDemo extends StatefulWidget {
   const _CustomUiDemo();
+
+  @override
+  State<_CustomUiDemo> createState() => _CustomUiDemoState();
+}
+
+class _CustomUiDemoState extends State<_CustomUiDemo> {
+  PreviewFit _fit = PreviewFit.cover;
 
   @override
   Widget build(BuildContext context) {
@@ -123,17 +130,45 @@ class _CustomUiDemo extends StatelessWidget {
       body: D3CameraScope(
         requestPermission: _requestCameraPermission,
         builder: (context, controller) {
-          final size = controller.value.displayPreviewSize;
           return Stack(
             fit: StackFit.expand,
             children: [
-              // displayPreviewSize, not previewSize -- the latter is
-              // sensor-space (landscape) and would frame the feed
-              // sideways relative to the captured image.
+              // A deliberately square box, not the feed's own aspect
+              // ratio: cover and contain only differ when the box and
+              // the content disagree, so this is what makes the fit
+              // toggle below actually show something. Sizing the box to
+              // displayPreviewSize (as D3CameraScreen does) makes the
+              // two modes identical.
               Center(
                 child: AspectRatio(
-                  aspectRatio: size == null ? 3 / 4 : size.width / size.height,
-                  child: CustomCameraPreview(controller: controller),
+                  aspectRatio: 1,
+                  child: ColoredBox(
+                    color: const Color(0xFF202020),
+                    child: CustomCameraPreview(
+                      controller: controller,
+                      fit: _fit,
+                    ),
+                  ),
+                ),
+              ),
+              Align(
+                alignment: Alignment.topCenter,
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: TextButton(
+                      onPressed: () => setState(() {
+                        _fit = _fit == PreviewFit.cover
+                            ? PreviewFit.contain
+                            : PreviewFit.cover;
+                      }),
+                      style: TextButton.styleFrom(
+                        backgroundColor: Colors.black54,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text('fit: ${_fit.name} (tap to toggle)'),
+                    ),
+                  ),
                 ),
               ),
               Align(
