@@ -113,6 +113,14 @@ enum LensDirection {
   back,
 }
 
+/// Flash behavior for still capture. Auto and on are only meaningful on
+/// lenses with a flash unit -- see [CameraCapabilityData.hasFlash].
+enum FlashModeData {
+  off,
+  on,
+  auto,
+}
+
 /// The subset of camera state changes the native side can independently
 /// observe and must report asynchronously -- e.g. the OS reclaiming the
 /// camera, or a permission revoked mid-session. The full controller state
@@ -209,6 +217,261 @@ class CameraCapabilityData {
   }
 }
 
+/// Result of [CameraHostApi.initialize]: the detected capability plus the
+/// Flutter texture id the bound preview is publishing to. Bundled into
+/// one response because CameraX binds Preview as part of the same
+/// bindToLifecycle() call that produces the capability-bearing CameraInfo
+/// -- there is no separate "preview ready" moment to report.
+class InitializeResult {
+  InitializeResult({
+    required this.capability,
+    required this.textureId,
+    required this.previewWidth,
+    required this.previewHeight,
+  });
+
+  CameraCapabilityData capability;
+
+  int textureId;
+
+  /// The bound Preview use case's actual output resolution, in sensor
+  /// (unrotated-for-display) pixels -- CustomCameraPreview needs this to
+  /// compute cover/contain layout against the Texture's real aspect
+  /// ratio rather than assuming one.
+  int previewWidth;
+
+  int previewHeight;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      capability,
+      textureId,
+      previewWidth,
+      previewHeight,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static InitializeResult decode(Object result) {
+    result as List<Object?>;
+    return InitializeResult(
+      capability: result[0]! as CameraCapabilityData,
+      textureId: result[1]! as int,
+      previewWidth: result[2]! as int,
+      previewHeight: result[3]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! InitializeResult || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(capability, other.capability) && _deepEquals(textureId, other.textureId) && _deepEquals(previewWidth, other.previewWidth) && _deepEquals(previewHeight, other.previewHeight);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'InitializeResult(capability: $capability, textureId: $textureId, previewWidth: $previewWidth, previewHeight: $previewHeight)';
+  }
+}
+
+/// Result of [CameraHostApi.switchCamera]: mirrors [InitializeResult]
+/// since switching cameras rebinds the whole CameraX use-case group,
+/// including Preview -- the texture id (and possibly the preview
+/// resolution) may change and capability must be re-read for the newly
+/// bound lens.
+class SwitchCameraResult {
+  SwitchCameraResult({
+    required this.capability,
+    required this.textureId,
+    required this.previewWidth,
+    required this.previewHeight,
+  });
+
+  CameraCapabilityData capability;
+
+  int textureId;
+
+  int previewWidth;
+
+  int previewHeight;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      capability,
+      textureId,
+      previewWidth,
+      previewHeight,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static SwitchCameraResult decode(Object result) {
+    result as List<Object?>;
+    return SwitchCameraResult(
+      capability: result[0]! as CameraCapabilityData,
+      textureId: result[1]! as int,
+      previewWidth: result[2]! as int,
+      previewHeight: result[3]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! SwitchCameraResult || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(capability, other.capability) && _deepEquals(textureId, other.textureId) && _deepEquals(previewWidth, other.previewWidth) && _deepEquals(previewHeight, other.previewHeight);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'SwitchCameraResult(capability: $capability, textureId: $textureId, previewWidth: $previewWidth, previewHeight: $previewHeight)';
+  }
+}
+
+/// A point in normalized [0,1] preview-space, used for tap-to-focus and
+/// tap-to-expose. Normalized rather than pixel-based so the Dart side
+/// never needs to know the native preview surface's actual resolution --
+/// consistent with the package's normalized-coordinate approach used
+/// throughout (see the design doc's coordinate system architecture).
+class NormalizedPointData {
+  NormalizedPointData({
+    required this.x,
+    required this.y,
+  });
+
+  double x;
+
+  double y;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      x,
+      y,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static NormalizedPointData decode(Object result) {
+    result as List<Object?>;
+    return NormalizedPointData(
+      x: result[0]! as double,
+      y: result[1]! as double,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! NormalizedPointData || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(x, other.x) && _deepEquals(y, other.y);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'NormalizedPointData(x: $x, y: $y)';
+  }
+}
+
+/// What a still-capture call produced.
+class CaptureResultData {
+  CaptureResultData({
+    required this.filePath,
+    required this.width,
+    required this.height,
+    required this.exifOrientationDegrees,
+    required this.capturedLensDirection,
+  });
+
+  String filePath;
+
+  int width;
+
+  int height;
+
+  int exifOrientationDegrees;
+
+  LensDirection capturedLensDirection;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      filePath,
+      width,
+      height,
+      exifOrientationDegrees,
+      capturedLensDirection,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static CaptureResultData decode(Object result) {
+    result as List<Object?>;
+    return CaptureResultData(
+      filePath: result[0]! as String,
+      width: result[1]! as int,
+      height: result[2]! as int,
+      exifOrientationDegrees: result[3]! as int,
+      capturedLensDirection: result[4]! as LensDirection,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! CaptureResultData || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(filePath, other.filePath) && _deepEquals(width, other.width) && _deepEquals(height, other.height) && _deepEquals(exifOrientationDegrees, other.exifOrientationDegrees) && _deepEquals(capturedLensDirection, other.capturedLensDirection);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'CaptureResultData(filePath: $filePath, width: $width, height: $height, exifOrientationDegrees: $exifOrientationDegrees, capturedLensDirection: $capturedLensDirection)';
+  }
+}
+
 class CameraErrorData {
   CameraErrorData({
     required this.code,
@@ -273,14 +536,29 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is LensDirection) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    }    else if (value is NativeCameraEvent) {
+    }    else if (value is FlashModeData) {
       buffer.putUint8(130);
       writeValue(buffer, value.index);
-    }    else if (value is CameraCapabilityData) {
+    }    else if (value is NativeCameraEvent) {
       buffer.putUint8(131);
+      writeValue(buffer, value.index);
+    }    else if (value is CameraCapabilityData) {
+      buffer.putUint8(132);
+      writeValue(buffer, value.encode());
+    }    else if (value is InitializeResult) {
+      buffer.putUint8(133);
+      writeValue(buffer, value.encode());
+    }    else if (value is SwitchCameraResult) {
+      buffer.putUint8(134);
+      writeValue(buffer, value.encode());
+    }    else if (value is NormalizedPointData) {
+      buffer.putUint8(135);
+      writeValue(buffer, value.encode());
+    }    else if (value is CaptureResultData) {
+      buffer.putUint8(136);
       writeValue(buffer, value.encode());
     }    else if (value is CameraErrorData) {
-      buffer.putUint8(132);
+      buffer.putUint8(137);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -295,10 +573,21 @@ class _PigeonCodec extends StandardMessageCodec {
         return value == null ? null : LensDirection.values[value];
       case 130:
         final value = readValue(buffer) as int?;
-        return value == null ? null : NativeCameraEvent.values[value];
+        return value == null ? null : FlashModeData.values[value];
       case 131:
-        return CameraCapabilityData.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : NativeCameraEvent.values[value];
       case 132:
+        return CameraCapabilityData.decode(readValue(buffer)!);
+      case 133:
+        return InitializeResult.decode(readValue(buffer)!);
+      case 134:
+        return SwitchCameraResult.decode(readValue(buffer)!);
+      case 135:
+        return NormalizedPointData.decode(readValue(buffer)!);
+      case 136:
+        return CaptureResultData.decode(readValue(buffer)!);
+      case 137:
         return CameraErrorData.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -321,11 +610,13 @@ class CameraHostApi {
 
   final String pigeonVar_messageChannelSuffix;
 
-  /// Binds a CameraX session to the plugin's own lifecycle owner (not an
-  /// Activity's) and returns the detected device capability. Throws (via
-  /// a FlutterError on the generated Dart side) if the requested lens
-  /// direction is unavailable or the camera permission is not granted.
-  Future<CameraCapabilityData> initialize(LensDirection initialLensDirection) async {
+  /// Binds a CameraX session -- Preview and ImageCapture use cases -- to
+  /// the plugin's own lifecycle owner (not an Activity's) and returns the
+  /// detected device capability plus the texture id the preview is
+  /// publishing to. Throws (via a FlutterError on the generated Dart
+  /// side) if the requested lens direction is unavailable or the camera
+  /// permission is not granted.
+  Future<InitializeResult> initialize(LensDirection initialLensDirection) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.d3_camera.CameraHostApi.initialize$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -341,7 +632,7 @@ class CameraHostApi {
         isNullValid: false,
     )
     ;
-    return pigeonVar_replyValue! as CameraCapabilityData;
+    return pigeonVar_replyValue! as InitializeResult;
   }
 
   /// Unbinds the CameraX session and releases the camera. Safe to call
@@ -354,6 +645,139 @@ class CameraHostApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Captures a still image at full resolution and writes it to a
+  /// package-owned cache file. Throws if called while no session is
+  /// bound.
+  Future<CaptureResultData> captureImage() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.d3_camera.CameraHostApi.captureImage$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as CaptureResultData;
+  }
+
+  /// Sets flash behavior for subsequent captures. Throws a FlutterError
+  /// if the active lens has no flash unit -- callers should check
+  /// [CameraCapabilityData.hasFlash] first, this is a defensive backstop.
+  Future<void> setFlashMode(FlashModeData mode) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.d3_camera.CameraHostApi.setFlashMode$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[mode]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Unbinds the current session and rebinds for the opposite lens
+  /// direction, returning the newly bound capability and texture id (both
+  /// may differ from the previous lens).
+  Future<SwitchCameraResult> switchCamera(LensDirection lensDirection) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.d3_camera.CameraHostApi.switchCamera$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[lensDirection]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as SwitchCameraResult;
+  }
+
+  /// Sets the zoom ratio. The native side clamps to the device's actual
+  /// range as a defensive backstop -- see
+  /// CameraCapability.clampZoom, which the Dart controller already
+  /// applies before this is ever called.
+  Future<void> setZoom(double zoomRatio) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.d3_camera.CameraHostApi.setZoom$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[zoomRatio]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Triggers autofocus AND auto-exposure metering together at a
+  /// normalized preview point (the standard "tap to focus" gesture), or
+  /// resumes continuous autofocus/default metering if [point] is null.
+  ///
+  /// Deliberately one call, not two -- CameraX's startFocusAndMetering()
+  /// cancels an in-flight call when a second one starts on the same
+  /// camera, so issuing separate AF and AE calls for the same tap is a
+  /// guaranteed race, not just a theoretical one.
+  Future<void> setMeteringPoint(NormalizedPointData? point) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.d3_camera.CameraHostApi.setMeteringPoint$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[point]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Sets exposure compensation, in EV. The native side clamps to the
+  /// device's actual range as a defensive backstop, mirroring [setZoom].
+  Future<void> setExposureCompensation(double ev) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.d3_camera.CameraHostApi.setExposureCompensation$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[ev]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(

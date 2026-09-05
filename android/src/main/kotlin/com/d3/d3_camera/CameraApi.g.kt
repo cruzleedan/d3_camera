@@ -214,6 +214,22 @@ enum class LensDirection(val raw: Int) {
 }
 
 /**
+ * Flash behavior for still capture. Auto and on are only meaningful on
+ * lenses with a flash unit -- see [CameraCapabilityData.hasFlash].
+ */
+enum class FlashModeData(val raw: Int) {
+  OFF(0),
+  ON(1),
+  AUTO(2);
+
+  companion object {
+    fun ofRaw(raw: Int): FlashModeData? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
+/**
  * The subset of camera state changes the native side can independently
  * observe and must report asynchronously -- e.g. the OS reclaiming the
  * camera, or a permission revoked mid-session. The full controller state
@@ -305,6 +321,232 @@ data class CameraCapabilityData (
   }
 }
 
+/**
+ * Result of [CameraHostApi.initialize]: the detected capability plus the
+ * Flutter texture id the bound preview is publishing to. Bundled into
+ * one response because CameraX binds Preview as part of the same
+ * bindToLifecycle() call that produces the capability-bearing CameraInfo
+ * -- there is no separate "preview ready" moment to report.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class InitializeResult (
+  val capability: CameraCapabilityData,
+  val textureId: Long,
+  /**
+   * The bound Preview use case's actual output resolution, in sensor
+   * (unrotated-for-display) pixels -- CustomCameraPreview needs this to
+   * compute cover/contain layout against the Texture's real aspect
+   * ratio rather than assuming one.
+   */
+  val previewWidth: Long,
+  val previewHeight: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): InitializeResult {
+      val capability = pigeonVar_list[0] as CameraCapabilityData
+      val textureId = pigeonVar_list[1] as Long
+      val previewWidth = pigeonVar_list[2] as Long
+      val previewHeight = pigeonVar_list[3] as Long
+      return InitializeResult(capability, textureId, previewWidth, previewHeight)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      capability,
+      textureId,
+      previewWidth,
+      previewHeight,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as InitializeResult
+    return CameraApiPigeonUtils.deepEquals(this.capability, other.capability) && CameraApiPigeonUtils.deepEquals(this.textureId, other.textureId) && CameraApiPigeonUtils.deepEquals(this.previewWidth, other.previewWidth) && CameraApiPigeonUtils.deepEquals(this.previewHeight, other.previewHeight)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.capability)
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.textureId)
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.previewWidth)
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.previewHeight)
+    return result
+  }
+  override fun toString(): String {
+    return "InitializeResult(capability=$capability, textureId=$textureId, previewWidth=$previewWidth, previewHeight=$previewHeight)"
+  }
+}
+
+/**
+ * Result of [CameraHostApi.switchCamera]: mirrors [InitializeResult]
+ * since switching cameras rebinds the whole CameraX use-case group,
+ * including Preview -- the texture id (and possibly the preview
+ * resolution) may change and capability must be re-read for the newly
+ * bound lens.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class SwitchCameraResult (
+  val capability: CameraCapabilityData,
+  val textureId: Long,
+  val previewWidth: Long,
+  val previewHeight: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): SwitchCameraResult {
+      val capability = pigeonVar_list[0] as CameraCapabilityData
+      val textureId = pigeonVar_list[1] as Long
+      val previewWidth = pigeonVar_list[2] as Long
+      val previewHeight = pigeonVar_list[3] as Long
+      return SwitchCameraResult(capability, textureId, previewWidth, previewHeight)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      capability,
+      textureId,
+      previewWidth,
+      previewHeight,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as SwitchCameraResult
+    return CameraApiPigeonUtils.deepEquals(this.capability, other.capability) && CameraApiPigeonUtils.deepEquals(this.textureId, other.textureId) && CameraApiPigeonUtils.deepEquals(this.previewWidth, other.previewWidth) && CameraApiPigeonUtils.deepEquals(this.previewHeight, other.previewHeight)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.capability)
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.textureId)
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.previewWidth)
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.previewHeight)
+    return result
+  }
+  override fun toString(): String {
+    return "SwitchCameraResult(capability=$capability, textureId=$textureId, previewWidth=$previewWidth, previewHeight=$previewHeight)"
+  }
+}
+
+/**
+ * A point in normalized [0,1] preview-space, used for tap-to-focus and
+ * tap-to-expose. Normalized rather than pixel-based so the Dart side
+ * never needs to know the native preview surface's actual resolution --
+ * consistent with the package's normalized-coordinate approach used
+ * throughout (see the design doc's coordinate system architecture).
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class NormalizedPointData (
+  val x: Double,
+  val y: Double
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): NormalizedPointData {
+      val x = pigeonVar_list[0] as Double
+      val y = pigeonVar_list[1] as Double
+      return NormalizedPointData(x, y)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      x,
+      y,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as NormalizedPointData
+    return CameraApiPigeonUtils.deepEquals(this.x, other.x) && CameraApiPigeonUtils.deepEquals(this.y, other.y)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.x)
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.y)
+    return result
+  }
+  override fun toString(): String {
+    return "NormalizedPointData(x=$x, y=$y)"
+  }
+}
+
+/**
+ * What a still-capture call produced.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class CaptureResultData (
+  val filePath: String,
+  val width: Long,
+  val height: Long,
+  val exifOrientationDegrees: Long,
+  val capturedLensDirection: LensDirection
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): CaptureResultData {
+      val filePath = pigeonVar_list[0] as String
+      val width = pigeonVar_list[1] as Long
+      val height = pigeonVar_list[2] as Long
+      val exifOrientationDegrees = pigeonVar_list[3] as Long
+      val capturedLensDirection = pigeonVar_list[4] as LensDirection
+      return CaptureResultData(filePath, width, height, exifOrientationDegrees, capturedLensDirection)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      filePath,
+      width,
+      height,
+      exifOrientationDegrees,
+      capturedLensDirection,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as CaptureResultData
+    return CameraApiPigeonUtils.deepEquals(this.filePath, other.filePath) && CameraApiPigeonUtils.deepEquals(this.width, other.width) && CameraApiPigeonUtils.deepEquals(this.height, other.height) && CameraApiPigeonUtils.deepEquals(this.exifOrientationDegrees, other.exifOrientationDegrees) && CameraApiPigeonUtils.deepEquals(this.capturedLensDirection, other.capturedLensDirection)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.filePath)
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.width)
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.height)
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.exifOrientationDegrees)
+    result = 31 * result + CameraApiPigeonUtils.deepHash(this.capturedLensDirection)
+    return result
+  }
+  override fun toString(): String {
+    return "CaptureResultData(filePath=$filePath, width=$width, height=$height, exifOrientationDegrees=$exifOrientationDegrees, capturedLensDirection=$capturedLensDirection)"
+  }
+}
+
 /** Generated class from Pigeon that represents data sent in messages. */
 data class CameraErrorData (
   /**
@@ -360,15 +602,40 @@ private open class CameraApiPigeonCodec : StandardMessageCodec() {
       }
       130.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
-          NativeCameraEvent.ofRaw(it.toInt())
+          FlashModeData.ofRaw(it.toInt())
         }
       }
       131.toByte() -> {
+        return (readValue(buffer) as Long?)?.let {
+          NativeCameraEvent.ofRaw(it.toInt())
+        }
+      }
+      132.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           CameraCapabilityData.fromList(it)
         }
       }
-      132.toByte() -> {
+      133.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          InitializeResult.fromList(it)
+        }
+      }
+      134.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          SwitchCameraResult.fromList(it)
+        }
+      }
+      135.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          NormalizedPointData.fromList(it)
+        }
+      }
+      136.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          CaptureResultData.fromList(it)
+        }
+      }
+      137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           CameraErrorData.fromList(it)
         }
@@ -382,16 +649,36 @@ private open class CameraApiPigeonCodec : StandardMessageCodec() {
         stream.write(129)
         writeValue(stream, value.raw.toLong())
       }
-      is NativeCameraEvent -> {
+      is FlashModeData -> {
         stream.write(130)
         writeValue(stream, value.raw.toLong())
       }
-      is CameraCapabilityData -> {
+      is NativeCameraEvent -> {
         stream.write(131)
+        writeValue(stream, value.raw.toLong())
+      }
+      is CameraCapabilityData -> {
+        stream.write(132)
+        writeValue(stream, value.toList())
+      }
+      is InitializeResult -> {
+        stream.write(133)
+        writeValue(stream, value.toList())
+      }
+      is SwitchCameraResult -> {
+        stream.write(134)
+        writeValue(stream, value.toList())
+      }
+      is NormalizedPointData -> {
+        stream.write(135)
+        writeValue(stream, value.toList())
+      }
+      is CaptureResultData -> {
+        stream.write(136)
         writeValue(stream, value.toList())
       }
       is CameraErrorData -> {
-        stream.write(132)
+        stream.write(137)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -408,17 +695,60 @@ private open class CameraApiPigeonCodec : StandardMessageCodec() {
  */
 interface CameraHostApi {
   /**
-   * Binds a CameraX session to the plugin's own lifecycle owner (not an
-   * Activity's) and returns the detected device capability. Throws (via
-   * a FlutterError on the generated Dart side) if the requested lens
-   * direction is unavailable or the camera permission is not granted.
+   * Binds a CameraX session -- Preview and ImageCapture use cases -- to
+   * the plugin's own lifecycle owner (not an Activity's) and returns the
+   * detected device capability plus the texture id the preview is
+   * publishing to. Throws (via a FlutterError on the generated Dart
+   * side) if the requested lens direction is unavailable or the camera
+   * permission is not granted.
    */
-  suspend fun initialize(initialLensDirection: LensDirection): CameraCapabilityData
+  suspend fun initialize(initialLensDirection: LensDirection): InitializeResult
   /**
    * Unbinds the CameraX session and releases the camera. Safe to call
    * from any state; calling it twice is a no-op, not an error.
    */
   suspend fun dispose()
+  /**
+   * Captures a still image at full resolution and writes it to a
+   * package-owned cache file. Throws if called while no session is
+   * bound.
+   */
+  suspend fun captureImage(): CaptureResultData
+  /**
+   * Sets flash behavior for subsequent captures. Throws a FlutterError
+   * if the active lens has no flash unit -- callers should check
+   * [CameraCapabilityData.hasFlash] first, this is a defensive backstop.
+   */
+  suspend fun setFlashMode(mode: FlashModeData)
+  /**
+   * Unbinds the current session and rebinds for the opposite lens
+   * direction, returning the newly bound capability and texture id (both
+   * may differ from the previous lens).
+   */
+  suspend fun switchCamera(lensDirection: LensDirection): SwitchCameraResult
+  /**
+   * Sets the zoom ratio. The native side clamps to the device's actual
+   * range as a defensive backstop -- see
+   * CameraCapability.clampZoom, which the Dart controller already
+   * applies before this is ever called.
+   */
+  suspend fun setZoom(zoomRatio: Double)
+  /**
+   * Triggers autofocus AND auto-exposure metering together at a
+   * normalized preview point (the standard "tap to focus" gesture), or
+   * resumes continuous autofocus/default metering if [point] is null.
+   *
+   * Deliberately one call, not two -- CameraX's startFocusAndMetering()
+   * cancels an in-flight call when a second one starts on the same
+   * camera, so issuing separate AF and AE calls for the same tap is a
+   * guaranteed race, not just a theoretical one.
+   */
+  suspend fun setMeteringPoint(point: NormalizedPointData?)
+  /**
+   * Sets exposure compensation, in EV. The native side clamps to the
+   * device's actual range as a defensive backstop, mirroring [setZoom].
+   */
+  suspend fun setExposureCompensation(ev: Double)
 
   companion object {
     /** The codec used by CameraHostApi. */
@@ -455,6 +785,122 @@ interface CameraHostApi {
             CoroutineScope(Dispatchers.Main).launch {
               val wrapped: List<Any?> = try {
                 api.dispose()
+                listOf(null)
+              } catch (exception: Throwable) {
+                CameraApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.d3_camera.CameraHostApi.captureImage$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.captureImage())
+              } catch (exception: Throwable) {
+                CameraApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.d3_camera.CameraHostApi.setFlashMode$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val modeArg = args[0] as FlashModeData
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                api.setFlashMode(modeArg)
+                listOf(null)
+              } catch (exception: Throwable) {
+                CameraApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.d3_camera.CameraHostApi.switchCamera$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val lensDirectionArg = args[0] as LensDirection
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.switchCamera(lensDirectionArg))
+              } catch (exception: Throwable) {
+                CameraApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.d3_camera.CameraHostApi.setZoom$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val zoomRatioArg = args[0] as Double
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                api.setZoom(zoomRatioArg)
+                listOf(null)
+              } catch (exception: Throwable) {
+                CameraApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.d3_camera.CameraHostApi.setMeteringPoint$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val pointArg = args[0] as NormalizedPointData?
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                api.setMeteringPoint(pointArg)
+                listOf(null)
+              } catch (exception: Throwable) {
+                CameraApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.d3_camera.CameraHostApi.setExposureCompensation$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val evArg = args[0] as Double
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                api.setExposureCompensation(evArg)
                 listOf(null)
               } catch (exception: Throwable) {
                 CameraApiPigeonUtils.wrapError(exception)

@@ -1,11 +1,14 @@
 import 'package:flutter/foundation.dart';
 
+import '../coordinates/normalized_point.dart';
 import '../errors/camera_exceptions.dart';
 import '../platform/camera_platform_interface.dart';
 import '../platform/method_channel_camera.dart';
 import 'camera_capability.dart';
 import 'camera_configuration.dart';
 import 'camera_state.dart';
+import 'capture_result.dart';
+import 'flash_mode.dart';
 
 /// Owns the camera lifecycle and hardware state. The single object
 /// consumers hold and pass to `CustomCameraPreview` and their own
@@ -16,12 +19,10 @@ import 'camera_state.dart';
 /// conventions (`TextEditingController`, `AnimationController`).
 ///
 /// Every mutating method checks [value].status first. Calls made during a
-/// transient state (`initializing`, `disposing`) throw
-/// [InvalidCameraStateException] immediately rather than queuing —
-/// queuing would hide bugs in consumer code that a loud failure surfaces
-/// during development. Phase 1 exposes only [initialize] and [dispose];
-/// capture/zoom/focus/exposure/switch methods are added once Phase 2
-/// implements the use cases they depend on.
+/// transient state (`initializing`, `capturing`, `switchingCamera`,
+/// `disposing`) throw [InvalidCameraStateException] immediately rather
+/// than queuing — queuing would hide bugs in consumer code that a loud
+/// failure surfaces during development.
 class CustomCameraController extends ChangeNotifier
     implements ValueListenable<CameraState> {
   CustomCameraController({
@@ -88,20 +89,149 @@ class CustomCameraController extends ChangeNotifier
     _setValue(_value.copyWith(status: CameraStatus.initializing));
 
     try {
-      final capability = await _platform.initialize(
+      final info = await _platform.initialize(
         configuration.initialLensDirection,
       );
       _setValue(
         _value.copyWith(
           status: CameraStatus.ready,
           activeLens: configuration.initialLensDirection,
-          capability: capability,
+          capability: info.capability,
+          textureId: info.textureId,
+          previewSize: info.previewSize,
         ),
       );
     } on CustomCameraException catch (e) {
+      _setValue(_value.copyWith(status: CameraStatus.error, lastError: e));
+      rethrow;
+    }
+  }
+
+  /// Captures a still image at full resolution. Only valid while
+  /// [CameraStatus.ready]; transitions through [CameraStatus.capturing]
+  /// and back to [CameraStatus.ready] on success, or to
+  /// [CameraStatus.error] on failure.
+  ///
+  /// Two rapid calls are not queued — the second throws
+  /// [InvalidCameraStateException] while the first is still in flight, by
+  /// design: burst capture, if ever needed, is a distinct future API, not
+  /// an implicit queue on this one.
+  Future<ImageCaptureResult> captureImage() async {
+    _requireStatus(CameraStatus.ready, 'captureImage');
+
+    _setValue(_value.copyWith(status: CameraStatus.capturing));
+
+    try {
+      final result = await _platform.captureImage();
+      _setValue(_value.copyWith(status: CameraStatus.ready));
+      return result;
+    } on CustomCameraException catch (e) {
+      _setValue(_value.copyWith(status: CameraStatus.error, lastError: e));
+      rethrow;
+    }
+  }
+
+  /// Sets flash behavior for subsequent captures. Only valid while
+  /// [CameraStatus.ready]. Does not check
+  /// [CameraCapability.hasFlash] itself — the platform layer is the
+  /// authority and throws a typed exception if the active lens has no
+  /// flash unit; consumers should still check `hasFlash` to decide
+  /// whether to show the control at all, per the design's
+  /// detect-never-assume rule.
+  Future<void> setFlashMode(FlashMode mode) async {
+    _requireStatus(CameraStatus.ready, 'setFlashMode');
+
+    try {
+      await _platform.setFlashMode(mode);
+      _setValue(_value.copyWith(flashMode: mode));
+    } on CustomCameraException catch (e) {
+      _setValue(_value.copyWith(status: CameraStatus.error, lastError: e));
+      rethrow;
+    }
+  }
+
+  /// Unbinds the current session and rebinds for [to] (or the opposite of
+  /// the currently active lens if [to] is omitted). Only valid while
+  /// [CameraStatus.ready]; transitions through
+  /// [CameraStatus.switchingCamera]. On success, [CameraState.capability]
+  /// and [CameraState.textureId] are replaced with the newly bound
+  /// session's values — they are not assumed to carry over, since a
+  /// different physical lens can have entirely different capability.
+  Future<void> switchCamera({CameraLensDirection? to}) async {
+    _requireStatus(CameraStatus.ready, 'switchCamera');
+
+    final targetLens = to ?? _oppositeLens(_value.activeLens!);
+
+    _setValue(
+      _value.copyWith(status: CameraStatus.switchingCamera, clearTextureId: true),
+    );
+
+    try {
+      final info = await _platform.switchCamera(targetLens);
       _setValue(
-        _value.copyWith(status: CameraStatus.error, lastError: e),
+        _value.copyWith(
+          status: CameraStatus.ready,
+          activeLens: targetLens,
+          capability: info.capability,
+          textureId: info.textureId,
+          previewSize: info.previewSize,
+        ),
       );
+    } on CustomCameraException catch (e) {
+      _setValue(_value.copyWith(status: CameraStatus.error, lastError: e));
+      rethrow;
+    }
+  }
+
+  /// Sets the zoom ratio, clamped to [CameraCapability]'s reported range
+  /// — a zoom slider dragged past a device's maximum simply stops there
+  /// rather than throwing. Only valid while [CameraStatus.ready].
+  Future<void> setZoom(double zoomRatio) async {
+    _requireStatus(CameraStatus.ready, 'setZoom');
+
+    final clamped = capability.clampZoom(zoomRatio);
+    try {
+      await _platform.setZoom(clamped);
+      _setValue(_value.copyWith(zoomRatio: clamped));
+    } on CustomCameraException catch (e) {
+      _setValue(_value.copyWith(status: CameraStatus.error, lastError: e));
+      rethrow;
+    }
+  }
+
+  /// Triggers autofocus AND auto-exposure metering together at
+  /// [normalizedPoint] — the standard tap-to-focus gesture — or resumes
+  /// continuous autofocus/default metering if `null`. Only valid while
+  /// [CameraStatus.ready].
+  ///
+  /// Deliberately one method, not two separate focus/exposure calls:
+  /// CameraX's underlying `startFocusAndMetering` cancels an in-flight
+  /// call when a second one starts on the same camera, so issuing
+  /// separate AF and AE calls for the same tap is a guaranteed
+  /// cancellation race, not just a theoretical one — confirmed on-device
+  /// during Phase 2 development.
+  Future<void> setMeteringPoint(NormalizedPoint? normalizedPoint) async {
+    _requireStatus(CameraStatus.ready, 'setMeteringPoint');
+
+    try {
+      await _platform.setMeteringPoint(normalizedPoint);
+    } on CustomCameraException catch (e) {
+      _setValue(_value.copyWith(status: CameraStatus.error, lastError: e));
+      rethrow;
+    }
+  }
+
+  /// Sets exposure compensation, in EV, clamped to [CameraCapability]'s
+  /// reported range. Only valid while [CameraStatus.ready].
+  Future<void> setExposureCompensation(double ev) async {
+    _requireStatus(CameraStatus.ready, 'setExposureCompensation');
+
+    final clamped = capability.clampExposureCompensation(ev);
+    try {
+      await _platform.setExposureCompensation(clamped);
+      _setValue(_value.copyWith(exposureCompensation: clamped));
+    } on CustomCameraException catch (e) {
+      _setValue(_value.copyWith(status: CameraStatus.error, lastError: e));
       rethrow;
     }
   }
@@ -127,7 +257,7 @@ class CustomCameraController extends ChangeNotifier
       _platform.setEventListener(null);
     }
 
-    _setValue(_value.copyWith(status: CameraStatus.disposed));
+    _setValue(_value.copyWith(status: CameraStatus.disposed, clearTextureId: true));
     super.dispose();
   }
 
@@ -154,5 +284,14 @@ class CustomCameraController extends ChangeNotifier
     };
 
     _setValue(_value.copyWith(status: CameraStatus.error, lastError: exception));
+  }
+}
+
+CameraLensDirection _oppositeLens(CameraLensDirection lens) {
+  switch (lens) {
+    case CameraLensDirection.front:
+      return CameraLensDirection.back;
+    case CameraLensDirection.back:
+      return CameraLensDirection.front;
   }
 }

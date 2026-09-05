@@ -1,16 +1,16 @@
+import 'dart:ui' show Size;
+
 import 'package:meta/meta.dart';
 
 import '../errors/camera_exceptions.dart';
 import 'camera_capability.dart';
+import 'flash_mode.dart';
 
 /// The camera controller's lifecycle state.
 ///
-/// Phase 1 implements the subset reachable without capture/preview:
 /// `uninitialized → initializing → ready → disposing → disposed`, plus
-/// `error`, reachable from any state. `capturing` and `switchingCamera`
-/// are part of the full design but have no transitions into them yet —
-/// they're declared here so [CameraState.status]'s type doesn't need to
-/// change shape again in Phase 2, but nothing in Phase 1 produces them.
+/// `capturing` and `switchingCamera` (both re-entrant from and back to
+/// `ready`) and `error`, reachable from any state.
 enum CameraStatus {
   uninitialized,
   initializing,
@@ -32,6 +32,11 @@ class CameraState {
     required this.status,
     this.activeLens,
     this.capability,
+    this.textureId,
+    this.previewSize,
+    this.flashMode = FlashMode.off,
+    this.zoomRatio = 1.0,
+    this.exposureCompensation = 0.0,
     this.lastError,
   });
 
@@ -45,6 +50,20 @@ class CameraState {
   /// Null until the first successful `initialize()` call.
   final CameraCapability? capability;
 
+  /// The Flutter texture id `CustomCameraPreview` reads to display the
+  /// live feed. Null until the first successful `initialize()` call, and
+  /// while [status] is [CameraStatus.switchingCamera] (the previous
+  /// texture is no longer valid and the new one is not yet bound).
+  final int? textureId;
+
+  /// The bound preview's native resolution, for cover/contain layout.
+  /// Null under the same conditions as [textureId].
+  final Size? previewSize;
+
+  final FlashMode flashMode;
+  final double zoomRatio;
+  final double exposureCompensation;
+
   /// Non-null only when [status] is [CameraStatus.error].
   final CustomCameraException? lastError;
 
@@ -52,6 +71,12 @@ class CameraState {
     CameraStatus? status,
     CameraLensDirection? activeLens,
     CameraCapability? capability,
+    int? textureId,
+    bool clearTextureId = false,
+    Size? previewSize,
+    FlashMode? flashMode,
+    double? zoomRatio,
+    double? exposureCompensation,
     CustomCameraException? lastError,
     bool clearError = false,
   }) {
@@ -59,6 +84,11 @@ class CameraState {
       status: status ?? this.status,
       activeLens: activeLens ?? this.activeLens,
       capability: capability ?? this.capability,
+      textureId: clearTextureId ? null : (textureId ?? this.textureId),
+      previewSize: clearTextureId ? null : (previewSize ?? this.previewSize),
+      flashMode: flashMode ?? this.flashMode,
+      zoomRatio: zoomRatio ?? this.zoomRatio,
+      exposureCompensation: exposureCompensation ?? this.exposureCompensation,
       lastError: clearError ? null : (lastError ?? this.lastError),
     );
   }
@@ -71,14 +101,31 @@ class CameraState {
           status == other.status &&
           activeLens == other.activeLens &&
           capability == other.capability &&
+          textureId == other.textureId &&
+          previewSize == other.previewSize &&
+          flashMode == other.flashMode &&
+          zoomRatio == other.zoomRatio &&
+          exposureCompensation == other.exposureCompensation &&
           lastError == other.lastError;
 
   @override
-  int get hashCode =>
-      Object.hash(status, activeLens, capability, lastError);
+  int get hashCode => Object.hash(
+    status,
+    activeLens,
+    capability,
+    textureId,
+    previewSize,
+    flashMode,
+    zoomRatio,
+    exposureCompensation,
+    lastError,
+  );
 
   @override
   String toString() =>
       'CameraState(status: $status, activeLens: $activeLens, '
-      'capability: $capability, lastError: $lastError)';
+      'capability: $capability, textureId: $textureId, '
+      'previewSize: $previewSize, flashMode: $flashMode, '
+      'zoomRatio: $zoomRatio, '
+      'exposureCompensation: $exposureCompensation, lastError: $lastError)';
 }
