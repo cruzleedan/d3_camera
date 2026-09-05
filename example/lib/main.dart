@@ -121,7 +121,8 @@ class _CameraDemoScreenState extends State<_CameraDemoScreen> {
 
   void _showError(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -216,7 +217,10 @@ class _CameraDemoScreenState extends State<_CameraDemoScreen> {
                                   );
                                   final point = NormalizedPoint(
                                     (local.dx / box.size.width).clamp(0.0, 1.0),
-                                    (local.dy / box.size.height).clamp(0.0, 1.0),
+                                    (local.dy / box.size.height).clamp(
+                                      0.0,
+                                      1.0,
+                                    ),
                                   );
                                   _setMeteringPoint(point);
                                 }
@@ -306,59 +310,74 @@ class _CaptureReviewScreen extends StatelessWidget {
     // behavior, not different available space to fit into.
     final captureAspectRatio = capture.width / capture.height;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          SafeArea(
-            child: Center(
-              child: AspectRatio(
-                aspectRatio: captureAspectRatio,
-                child: Image.file(File(capture.filePath), fit: BoxFit.contain),
+    // This screen is swapped in by state rather than pushed as a route,
+    // so there is nothing on the navigator stack for Android's back
+    // gesture to pop -- without this, back closed the whole app instead
+    // of returning to the capture screen. canPop: false claims the back
+    // intent, and onPopInvokedWithResult routes it to the same dismiss
+    // callback the close button uses, so gesture and button agree.
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) onDismiss();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            SafeArea(
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: captureAspectRatio,
+                  child: Image.file(
+                    File(capture.filePath),
+                    fit: BoxFit.contain,
+                  ),
+                ),
               ),
             ),
-          ),
-          // Column, not a bare Row: this sits in a StackFit.expand Stack,
-          // so a Row here stretches to the full screen height and its
-          // default centered cross-axis alignment parks both children
-          // halfway down the screen, floating over the middle of the
-          // photo. Pinning the close button to the top edge and the
-          // metadata caption to the bottom keeps each anchored to a real
-          // edge, the way a native review screen reads.
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _ControlButton(icon: Icons.close, onPressed: onDismiss),
-                  const Spacer(),
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black45,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '${capture.width}x${capture.height} '
-                        '(${capture.capturedLensDirection.name})',
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
+            // Column, not a bare Row: this sits in a StackFit.expand Stack,
+            // so a Row here stretches to the full screen height and its
+            // default centered cross-axis alignment parks both children
+            // halfway down the screen, floating over the middle of the
+            // photo. Pinning the close button to the top edge and the
+            // metadata caption to the bottom keeps each anchored to a real
+            // edge, the way a native review screen reads.
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _ControlButton(icon: Icons.close, onPressed: onDismiss),
+                    const Spacer(),
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black45,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${capture.width}x${capture.height} '
+                          '(${capture.capturedLensDirection.name})',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -387,7 +406,10 @@ class _ControlButton extends StatelessWidget {
 /// label rather than an icon, since "4:3"/"16:9" isn't well represented
 /// by a single glyph the way flash/switch are.
 class _AspectRatioButton extends StatelessWidget {
-  const _AspectRatioButton({required this.aspectRatio, required this.onPressed});
+  const _AspectRatioButton({
+    required this.aspectRatio,
+    required this.onPressed,
+  });
 
   final AspectRatioPreset aspectRatio;
   final VoidCallback? onPressed;
@@ -449,10 +471,14 @@ class _ZoomLevelBar extends StatelessWidget {
   final CustomCameraController controller;
 
   List<double> _levels(double min, double max) {
-    final candidates = <double>{min, 1.0, 2.0, 3.0, 5.0, max}
-        .where((level) => level >= min && level <= max)
-        .toList()
-      ..sort();
+    final candidates = <double>{
+      min,
+      1.0,
+      2.0,
+      3.0,
+      5.0,
+      max,
+    }.where((level) => level >= min && level <= max).toList()..sort();
     return candidates;
   }
 
