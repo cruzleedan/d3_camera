@@ -44,8 +44,10 @@ export 'src/ui/zoom_level_bar.dart';
 // place on a full-resolution export.
 export 'src/annotations/annotation.dart';
 export 'src/annotations/annotation_controller.dart';
+export 'src/annotations/annotation_overlay_widget.dart';
 export 'src/annotations/annotation_painter.dart';
 export 'src/annotations/annotation_style.dart';
+export 'src/annotations/annotation_tool.dart';
 export 'src/annotations/hit_testing.dart';
 
 // Coordinates
